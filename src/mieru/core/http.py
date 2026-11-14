@@ -11,7 +11,11 @@ TIMEOUT_SECONDS = 15
 _HEADERS = {"User-Agent": "Mozilla/5.0 (mieru Anki add-on)"}
 
 
-def get(url: str, params: dict[str, Any] | None = None) -> requests.Response:
-    response = requests.get(url, params=params, headers=_HEADERS, timeout=TIMEOUT_SECONDS)
+def get(
+    url: str, params: dict[str, Any] | None = None, headers: dict[str, str] | None = None
+) -> requests.Response:
+    response = requests.get(
+        url, params=params, headers={**_HEADERS, **(headers or {})}, timeout=TIMEOUT_SECONDS
+    )
     response.raise_for_status()
     return response

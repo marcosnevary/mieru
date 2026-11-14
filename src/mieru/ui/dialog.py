@@ -43,7 +43,7 @@ from aqt.utils import (
 from ..core import audio, dictionary, images
 from ..core.dictionary import Candidate
 from ..core.furigana import to_anki_furigana
-from ..core.images import ImageResult, InvalidApiKeyError
+from ..core.images import SOURCES, ImageResult, InvalidApiKeyError, Source
 from .note_type import (
     AUDIO_FIELD,
     ENGLISH_FIELD,
@@ -57,13 +57,11 @@ _THUMBNAIL_SIZE = QSize(150, 150)
 _THUMBNAIL_DOWNLOADS = 8
 _MEANINGS_SHOWN = 3
 _MISSING_KEY_MESSAGE = (
-    "To choose pictures, add a free Pixabay API key in "
-    'Tools › Add-ons › mieru › Config (get one at <a href="https://pixabay.com/api/docs/">'
-    "pixabay.com/api/docs</a>)."
+    "To choose pictures, add a free Pixabay or Pexels API key in "
+    "Tools › Add-ons › mieru › Config (get one at "
+    '<a href="https://pixabay.com/api/docs/">pixabay.com/api/docs</a> or '
+    '<a href="https://www.pexels.com/api/">pexels.com/api</a>).'
 )
-# Pixabay's API terms require showing where search results come from.
-_IMAGES_LABEL = 'Picture — from <a href="https://pixabay.com/">Pixabay</a>'
-_INVALID_KEY_MESSAGE = "Pixabay rejected the API key. Check it in Tools › Add-ons › mieru › Config."
 
 
 class MieruDialog(QDialog):
@@ -77,6 +75,7 @@ class MieruDialog(QDialog):
         self._candidates: list[Candidate] = []
         self._candidate: Candidate | None = None
         self._audio: bytes | None = None
+        self._image_query = ""
         self._images: list[ImageResult] = []
         self._setup_ui()
         restoreGeom(self, _GEOMETRY_KEY)
@@ -113,6 +112,15 @@ class MieruDialog(QDialog):
         self._images_label.setOpenExternalLinks(True)
         self._images_label.setWordWrap(True)
         layout.addWidget(self._images_label)
+        image_search_row = QHBoxLayout()
+        self._image_query_input = QLineEdit()
+        self._image_query_input.setPlaceholderText("Picture search term")
+        self._image_query_input.returnPressed.connect(self._search_images)
+        image_search_button = QPushButton("Search pictures")
+        image_search_button.clicked.connect(self._search_images)
+        image_search_row.addWidget(self._image_query_input)
+        image_search_row.addWidget(image_search_button)
+        layout.addLayout(image_search_row)
         self._image_list = QListWidget()
         self._image_list.setViewMode(QListView.ViewMode.IconMode)
         self._image_list.setIconSize(_THUMBNAIL_SIZE)
@@ -142,19 +150,17 @@ class MieruDialog(QDialog):
         self._candidates = []
         self._candidate = None
         self._audio = None
-        self._images = []
         self._candidate_list.clear()
-        self._image_list.clear()
         self._audio_status.setText("")
         self._play_button.setEnabled(False)
-        self._update_add_button()
-        self._images_label.setText(
-            _IMAGES_LABEL if self._pixabay_api_key() else _MISSING_KEY_MESSAGE
-        )
+        self._image_query_input.clear()
+        self._clear_images()
+        self._images_label.setText(_images_label(self._configured_sources()))
         self._query_input.setFocus()
         self._query_input.selectAll()
 
-    # Search: candidates and pictures both depend only on the English word.
+    # Search: candidates come from the English word; pictures from their own
+    # search term, which starts as the English word and can be refined.
 
     def _search(self) -> None:
         query = self._query_input.text().strip()
@@ -171,12 +177,32 @@ class MieruDialog(QDialog):
             self._show_network_error
         ).run_in_background()
 
-        if api_key := self._pixabay_api_key():
-            QueryOp(
-                parent=self,
-                op=lambda _col: _search_images_with_thumbnails(query, api_key),
-                success=lambda found: self._show_images(query, found),
-            ).without_collection().failure(self._on_image_search_failed).run_in_background()
+        self._image_query_input.setText(query)
+        self._search_images()
+
+    def _search_images(self) -> None:
+        image_query = self._image_query_input.text().strip()
+        if not image_query:
+            return
+        self._clear_images()
+        self._image_query = image_query
+        sources = self._configured_sources()
+        self._images_label.setText(_images_label(sources))
+        for source, api_key in sources:
+            self._search_source(source, api_key, image_query)
+
+    def _search_source(self, source: Source, api_key: str, image_query: str) -> None:
+        QueryOp(
+            parent=self,
+            op=lambda _col: _search_with_thumbnails(source, api_key, image_query),
+            success=lambda found: self._show_images(source, image_query, found),
+        ).without_collection().failure(self._on_image_search_failed).run_in_background()
+
+    def _clear_images(self) -> None:
+        self._image_query = ""
+        self._images = []
+        self._image_list.clear()
+        self._update_add_button()
 
     def _show_candidates(self, query: str, candidates: list[Candidate]) -> None:
         if query != self._query:
@@ -193,23 +219,31 @@ class MieruDialog(QDialog):
             self._candidate_list.addItem(f"{label}\n    {meanings}")
         self._candidate_list.setCurrentRow(0)
 
-    def _show_images(self, query: str, found: list[tuple[ImageResult, bytes | None]]) -> None:
-        if query != self._query:
+    def _show_images(
+        self, source: Source, image_query: str, found: list[tuple[ImageResult, bytes | None]]
+    ) -> None:
+        if image_query != self._image_query:
             return
         if not found:
-            tooltip(f"No pictures found for “{query}”.", parent=self)
+            tooltip(f"No pictures found on {source.name} for “{image_query}”.", parent=self)
         for result, thumbnail in found:
             pixmap = QPixmap()
             if thumbnail is not None:
                 pixmap.loadFromData(thumbnail)
             item = QListWidgetItem(QIcon(pixmap), "")
+            item.setToolTip(result.credit)
             item.setSizeHint(_THUMBNAIL_SIZE + QSize(12, 12))
             self._image_list.addItem(item)
             self._images.append(result)
 
     def _on_image_search_failed(self, error: Exception) -> None:
         if isinstance(error, InvalidApiKeyError):
-            self._images_label.setText(_INVALID_KEY_MESSAGE)
+            # Appended rather than replacing the label: the other source's
+            # attribution must stay visible next to its results.
+            self._images_label.setText(
+                f"{self._images_label.text()}<br>{error.source} rejected the API key. "
+                "Check it in Tools › Add-ons › mieru › Config."
+            )
         else:
             self._show_network_error(error)
 
@@ -299,10 +333,11 @@ class MieruDialog(QDialog):
         tooltip(f"Added {candidate.word}", parent=self.mw)
         self._reset()
 
-    def _pixabay_api_key(self) -> str:
+    def _configured_sources(self) -> list[tuple[Source, str]]:
         # Read on every use so a key saved while the window is open takes effect.
         config = self.mw.addonManager.getConfig(__name__) or {}
-        return str(config.get("pixabay_api_key", "")).strip()
+        keys = ((source, str(config.get(source.config_key, "")).strip()) for source in SOURCES)
+        return [(source, key) for source, key in keys if key]
 
     def _show_network_error(self, error: Exception) -> None:
         if isinstance(error, requests.RequestException):
@@ -316,10 +351,18 @@ class MieruDialog(QDialog):
         super().reject()
 
 
-def _search_images_with_thumbnails(
-    query: str, api_key: str
+def _images_label(sources: list[tuple[Source, str]]) -> str:
+    if not sources:
+        return _MISSING_KEY_MESSAGE
+    # The Pixabay and Pexels API terms require showing where results come from.
+    links = " and ".join(f'<a href="{source.url}">{source.name}</a>' for source, _key in sources)
+    return f"Picture — from {links}"
+
+
+def _search_with_thumbnails(
+    source: Source, api_key: str, image_query: str
 ) -> list[tuple[ImageResult, bytes | None]]:
-    results = images.search(query, api_key)
+    results = source.search(image_query, api_key)
     with ThreadPoolExecutor(max_workers=_THUMBNAIL_DOWNLOADS) as pool:
         thumbnails = pool.map(lambda result: _try_download(result.preview_url), results)
         return list(zip(results, thumbnails))
