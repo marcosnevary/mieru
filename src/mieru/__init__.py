@@ -21,6 +21,14 @@ def _open_dialog() -> None:
     _dialog.activateWindow()
 
 
+def _refresh_note_type() -> None:
+    # Imported lazily so loading the add-on stays cheap at Anki startup.
+    from .ui.note_type import refresh_note_type
+
+    assert mw is not None
+    refresh_note_type(mw.col)
+
+
 def _add_menu_action() -> None:
     assert mw is not None
     action = QAction("mieru…", mw)
@@ -29,4 +37,5 @@ def _add_menu_action() -> None:
     mw.form.menuTools.addAction(action)
 
 
+gui_hooks.profile_did_open.append(_refresh_note_type)
 gui_hooks.main_window_did_init.append(_add_menu_action)

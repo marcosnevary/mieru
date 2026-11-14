@@ -44,6 +44,9 @@ _DIVIDER = '<hr class="divider">'
 # {{FrontSide}} recreates the canvas empty on the back, so the drawing is saved
 # after each stroke and redrawn there. sessionStorage survives the page reload some
 # mobile clients do between sides; the window fallback covers clients that block it.
+# The canvas stays editable on the back, over the revealed stroke order, so the
+# drawing can be corrected while it is compared; only the front clears what the
+# previous card saved.
 # The class is prefixed because Anki's reviewer CSS already styles .drawing
 # (zoom: 50%, for its LaTeX images), which shrank the area and threw off pointers.
 # Pages can still be zoomed (Anki zooms the body on high-DPI Windows and Linux) or
@@ -96,13 +99,9 @@ _DRAWING_SCRIPT = """<script>
   fit();
   if (window.ResizeObserver) new ResizeObserver(fit).observe(canvas);
 
-  if (isBack) {
-    area.classList.add("mieru-answer");
-    button.hidden = true;
-    return;
-  }
+  if (isBack) area.classList.add("mieru-answer");
+  else save(null);
 
-  save(null);
   let last = null;
   const pointAt = (event) => {
     const box = canvas.getBoundingClientRect();
@@ -348,6 +347,20 @@ def ensure_note_type(col: Collection) -> NotetypeDict:
     notetype = models.by_name(NOTE_TYPE_NAME)
     assert notetype is not None
     return notetype
+
+
+def refresh_note_type(col: Collection) -> None:
+    """Apply the add-on's templates and CSS to the note type, if the collection has it.
+
+    Runs when a profile opens, so template and CSS changes reach the cards already
+    in the collection without waiting for the next added note. Unlike
+    ensure_note_type it creates nothing and adds no field or template: those change
+    the schema, which needs the user's confirmation, so they stay in the Add flow.
+    """
+    models = col.models
+    notetype = models.by_name(NOTE_TYPE_NAME)
+    if notetype is not None and _apply_layout(notetype):
+        models.update_dict(notetype)
 
 
 def _create(col: Collection) -> None:

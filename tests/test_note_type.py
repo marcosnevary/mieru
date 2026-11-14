@@ -7,7 +7,7 @@ import pytest
 from anki.cards import Card
 from anki.collection import Collection
 
-from mieru.ui.note_type import NOTE_TYPE_NAME, ensure_note_type
+from mieru.ui.note_type import NOTE_TYPE_NAME, ensure_note_type, refresh_note_type
 
 _RUBY_WORD = "<ruby><rb>食</rb><rt>た</rt></ruby>べる"
 _PICTURE = "mieru_食べる.jpg"
@@ -104,6 +104,7 @@ def test_writing_card_shows_picture_audio_and_drawing_area_and_answers_with_stro
     assert _RUBY_WORD not in question
     assert _RUBY_WORD not in answer
     assert "<canvas>" in answer
+    assert "button.hidden = true" not in answer
     assert f'<div class="mieru-guide"><img src="{_STROKE_ORDER}"></div>' in answer
     assert _CONNECTION in answer
     assert answer.count('<hr class="divider">') == 2
@@ -136,6 +137,43 @@ def test_restores_the_templates_and_css_of_an_existing_note_type(col: Collection
     assert ([(t["name"], t["qfmt"], t["afmt"]) for t in restored["tmpls"]], restored["css"]) == (
         expected
     )
+
+
+def test_refreshes_the_templates_and_css_of_an_existing_note_type(col: Collection) -> None:
+    original = ensure_note_type(col)
+    expected = [(t["name"], t["qfmt"], t["afmt"]) for t in original["tmpls"]], original["css"]
+    for template, front in zip(original["tmpls"], ("{{Word}}", "{{Image}}", "{{Audio}}")):
+        template["qfmt"] = front
+    original["css"] = ".card {}"
+    col.models.update_dict(original)
+
+    refresh_note_type(col)
+
+    refreshed = col.models.by_name(NOTE_TYPE_NAME)
+    assert refreshed is not None
+    assert ([(t["name"], t["qfmt"], t["afmt"]) for t in refreshed["tmpls"]], refreshed["css"]) == (
+        expected
+    )
+
+
+def test_refresh_creates_no_note_type(col: Collection) -> None:
+    refresh_note_type(col)
+
+    assert col.models.by_name(NOTE_TYPE_NAME) is None
+
+
+def test_refresh_adds_no_field_or_template_so_it_changes_no_schema(col: Collection) -> None:
+    notetype = ensure_note_type(col)
+    col.models.remove_template(notetype, notetype["tmpls"][2])
+    col.models.update_dict(notetype)
+
+    # Adding it would ask for the full sync a schema change needs, and startup has
+    # no one to confirm.
+    refresh_note_type(col)
+
+    refreshed = col.models.by_name(NOTE_TYPE_NAME)
+    assert refreshed is not None
+    assert [t["name"] for t in refreshed["tmpls"]] == ["Comprehension", "Production"]
 
 
 def test_adds_the_missing_cards_and_connection_to_an_older_note_type(
