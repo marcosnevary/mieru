@@ -21,6 +21,7 @@ FIELDS = (WORD_FIELD, AUDIO_FIELD, IMAGE_FIELD, ENGLISH_FIELD, PERSONAL_CONNECTI
 
 _WORD = f'<span class="word">{{{{furigana:{WORD_FIELD}}}}}</span>'
 _AUDIO = f"{{{{{AUDIO_FIELD}}}}}"
+_AUDIO_ROW = f'<div class="audio">{_AUDIO}</div>'
 _PICTURE = f"{{{{{IMAGE_FIELD}}}}}"
 _CONNECTION = f'<div class="connection">{{{{{PERSONAL_CONNECTION_FIELD}}}}}</div>'
 
@@ -30,14 +31,15 @@ _TEMPLATES = (
     (
         "Comprehension",
         f'<div class="heading">{_WORD}</div>',
-        f'<div class="heading">{_WORD}{_AUDIO}</div>\n'
+        f'<div class="heading">{_WORD}</div>\n'
         f'<div id="answer" class="picture">{_PICTURE}</div>\n'
-        f"{_CONNECTION}",
+        f"{_AUDIO_ROW}\n{_CONNECTION}",
     ),
     (
         "Production",
         f'<div class="picture">{_PICTURE}</div>',
-        f'{{{{FrontSide}}}}\n<div id="answer" class="heading">{_WORD}{_AUDIO}</div>\n{_CONNECTION}',
+        f'{{{{FrontSide}}}}\n<div id="answer" class="audio">{_AUDIO}</div>\n'
+        f'<div class="heading">{_WORD}</div>\n{_CONNECTION}',
     ),
 )
 
@@ -65,10 +67,25 @@ _CSS = """.card {
 .picture img {
   max-width: 100%;
   max-height: 60vh;
+  /* Drops the gap an inline image leaves below itself for text descenders. */
+  vertical-align: bottom;
+}
+
+/* A flex row is as tall as the button, where an inline button would sit in a
+   line box sized for the card's 48px text. */
+.audio {
+  display: flex;
+  justify-content: center;
+  margin-top: 0.1em;
+}
+
+/* The word when it follows the picture and audio, on the production back. */
+.audio ~ .heading {
+  margin-top: 0.4em;
 }
 
 .connection {
-  margin-top: 1em;
+  margin-top: 0.25em;
   font-size: 0.4em;
 }"""
 

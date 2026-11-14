@@ -27,13 +27,13 @@ Every network call runs in a `QueryOp(...).without_collection()`, so the UI neve
 
 Templates, matched by position:
 
-- `Comprehension`: front shows the word; back shows the word with the audio button, the picture and the personal connection.
-- `Production`: front shows the picture; back adds the word with the audio button and the personal connection.
+- `Comprehension`: front shows the word; back shows the word, the picture with the audio button under it, and the personal connection.
+- `Production`: front shows the picture; back adds the audio button under it, the word and the personal connection.
 
 Fields, in order:
 
 - `Word`: the word in Anki furigana syntax (`食[た]べる`), rendered with `{{furigana:Word}}`. It is the first field, so Anki's duplicate check applies to it; adding a duplicate asks for confirmation.
-- `Audio`: `[sound:…]`, on the back of both cards, next to the word.
+- `Audio`: `[sound:…]`, on the back of both cards, under the picture.
 - `Image`: `<img>`.
 - `English`: the searched word (not the picture search term). Not shown on the cards; kept so notes can be found in the Browser.
 - `Personal Connection`: what the user wrote, HTML-escaped, at the bottom of both backs. Last because Anki appends fields added to an existing note type, so new and older collections share the field order.
