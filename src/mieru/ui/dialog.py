@@ -18,15 +18,10 @@ from aqt.qt import (
     QDialog,
     QDialogButtonBox,
     QHBoxLayout,
-    QIcon,
     QLabel,
     QLineEdit,
-    QListView,
-    QListWidget,
-    QListWidgetItem,
     QPixmap,
     QPushButton,
-    QSize,
     QVBoxLayout,
     QWidget,
 )
@@ -51,12 +46,14 @@ from .note_type import (
     WORD_FIELD,
     ensure_note_type,
 )
+from .widgets import CandidateList, PictureGrid
 
 _GEOMETRY_KEY = "mieru"
 _DEFAULT_WIDTH = 760
-_THUMBNAIL_SIZE = QSize(150, 150)
+_ROW_SPACING = 6
+_SECTION_SPACING = 16
+_TEXT_MARGIN = 4
 _THUMBNAIL_DOWNLOADS = 8
-_MEANINGS_SHOWN = 3
 _MISSING_KEY_MESSAGE = (
     "To choose pictures, add a free Pixabay API key in "
     'Tools › Add-ons › mieru › Config (get one at <a href="https://pixabay.com/api/docs/">'
@@ -84,6 +81,7 @@ class MieruDialog(QDialog):
         self.setWindowTitle("mieru")
         disable_help_button(self)
         layout = QVBoxLayout(self)
+        layout.setSpacing(_ROW_SPACING)
 
         deck_row = QWidget()
         self._deck_chooser = DeckChooser(self.mw, deck_row)
@@ -92,22 +90,25 @@ class MieruDialog(QDialog):
         search_row = QHBoxLayout()
         self._query_input = QLineEdit()
         self._query_input.setPlaceholderText("English word, e.g. dog")
+        self._query_input.setTextMargins(_TEXT_MARGIN, 0, _TEXT_MARGIN, 0)
         self._query_input.returnPressed.connect(self._search)
         search_button = QPushButton("Search")
         search_button.clicked.connect(self._search)
         search_row.addWidget(self._query_input)
         search_row.addWidget(search_button)
         layout.addLayout(search_row)
+        layout.addSpacing(_SECTION_SPACING)
 
         word_row = QHBoxLayout()
         self._play_button = QPushButton("▶ Play")
         self._play_button.clicked.connect(self._play_audio)
-        word_row.addWidget(QLabel("Japanese word"), stretch=1)
+        word_row.addWidget(QLabel("<b>Japanese word</b>"), stretch=1)
         word_row.addWidget(self._play_button)
         layout.addLayout(word_row)
-        self._candidate_list = QListWidget()
+        self._candidate_list = CandidateList()
         self._candidate_list.currentRowChanged.connect(self._on_candidate_changed)
         layout.addWidget(self._candidate_list, stretch=1)
+        layout.addSpacing(_SECTION_SPACING)
 
         self._images_label = QLabel()
         self._images_label.setOpenExternalLinks(True)
@@ -116,20 +117,17 @@ class MieruDialog(QDialog):
         image_search_row = QHBoxLayout()
         self._image_query_input = QLineEdit()
         self._image_query_input.setPlaceholderText("Picture search term")
+        self._image_query_input.setTextMargins(_TEXT_MARGIN, 0, _TEXT_MARGIN, 0)
         self._image_query_input.returnPressed.connect(self._search_images)
         image_search_button = QPushButton("Search")
         image_search_button.clicked.connect(self._search_images)
         image_search_row.addWidget(self._image_query_input)
         image_search_row.addWidget(image_search_button)
         layout.addLayout(image_search_row)
-        self._image_list = QListWidget()
-        self._image_list.setViewMode(QListView.ViewMode.IconMode)
-        self._image_list.setIconSize(_THUMBNAIL_SIZE)
-        self._image_list.setResizeMode(QListView.ResizeMode.Adjust)
-        self._image_list.setMovement(QListView.Movement.Static)
-        self._image_list.setSpacing(6)
+        self._image_list = PictureGrid()
         self._image_list.currentRowChanged.connect(lambda _row: self._update_add_button())
         layout.addWidget(self._image_list, stretch=3)
+        layout.addSpacing(_SECTION_SPACING)
 
         buttons = QDialogButtonBox()
         add_button = buttons.addButton("Add", QDialogButtonBox.ButtonRole.AcceptRole)
@@ -208,11 +206,7 @@ class MieruDialog(QDialog):
             return
         self._candidates = candidates
         for candidate in candidates:
-            label = f"{candidate.word}【{candidate.reading}】"
-            if candidate.is_common:
-                label += "  · common"
-            meanings = "; ".join(candidate.meanings[:_MEANINGS_SHOWN])
-            self._candidate_list.addItem(f"{label}\n    {meanings}")
+            self._candidate_list.add_candidate(candidate)
         self._candidate_list.setCurrentRow(0)
 
     def _show_images(
@@ -226,10 +220,7 @@ class MieruDialog(QDialog):
             pixmap = QPixmap()
             if thumbnail is not None:
                 pixmap.loadFromData(thumbnail)
-            item = QListWidgetItem(QIcon(pixmap), "")
-            item.setToolTip(result.credit)
-            item.setSizeHint(_THUMBNAIL_SIZE + QSize(12, 12))
-            self._image_list.addItem(item)
+            self._image_list.add_picture(pixmap, result.credit)
             self._images.append(result)
 
     def _on_image_search_failed(self, error: Exception) -> None:
@@ -349,7 +340,7 @@ def _images_label(sources: list[tuple[Source, str]]) -> str:
         return _MISSING_KEY_MESSAGE
     # Pixabay's API terms require showing where search results come from.
     links = " and ".join(f'<a href="{source.url}">{source.name}</a>' for source, _key in sources)
-    return f"Picture (from {links})"
+    return f"<b>Picture</b> (from {links})"
 
 
 def _search_with_thumbnails(
