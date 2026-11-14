@@ -1,0 +1,40 @@
+[project]
+name = "mieru"
+version = "0.1.0"
+description = "Anki add-on that turns an English word into a Japanese flashcard with furigana, audio and a picture."
+# The add-on itself must run on Anki's bundled Python (>= 3.9, enforced by ruff's
+# target-version); this only constrains the development environment.
+requires-python = ">=3.10"
+
+[dependency-groups]
+dev = [
+    "aqt[qt6]>=23.10",
+    "mypy",
+    "pyqt6==6.11.0",
+    "pytest",
+    "requests",
+    "ruff",
+    "types-requests",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+src = ["src"]
+target-version = "py39"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+files = ["src", "tests", "scripts"]
+mypy_path = "src"
+python_version = "3.13"
+strict = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
