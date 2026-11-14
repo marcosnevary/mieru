@@ -9,6 +9,7 @@ from pathlib import PurePosixPath
 from urllib.parse import urlparse
 
 import requests
+from anki.errors import AbortSchemaModification
 from anki.notes import NoteFieldsCheckResult
 from anki.utils import tmpfile
 from aqt.deckchooser import DeckChooser
@@ -44,6 +45,7 @@ from .note_type import (
     AUDIO_FIELD,
     ENGLISH_FIELD,
     IMAGE_FIELD,
+    PERSONAL_CONNECTION_FIELD,
     WORD_FIELD,
     ensure_note_type,
 )
@@ -76,6 +78,7 @@ class _Word:
     audio_requested: set[Candidate] = field(default_factory=set)
     pictures: list[tuple[ImageResult, QPixmap]] = field(default_factory=list)
     picture_row: int = -1
+    personal_connection: str = ""
     added: bool = False
 
     @property
@@ -83,6 +86,14 @@ class _Word:
         if self.candidates and 0 <= self.candidate_row < len(self.candidates):
             return self.candidates[self.candidate_row]
         return None
+
+    @property
+    def is_ready(self) -> bool:
+        return (
+            self.candidate is not None
+            and self.picture_row >= 0
+            and bool(self.personal_connection.strip())
+        )
 
 
 class MieruDialog(QDialog):
@@ -165,6 +176,16 @@ class MieruDialog(QDialog):
         self._image_list = PictureGrid()
         self._image_list.currentRowChanged.connect(self._on_picture_changed)
         layout.addWidget(self._image_list, stretch=3)
+        layout.addSpacing(_SECTION_SPACING)
+
+        layout.addWidget(QLabel("<b>Personal connection</b>"))
+        self._connection_input = QLineEdit()
+        self._connection_input.setPlaceholderText(
+            "A memory, place or person this word brings to mind"
+        )
+        self._connection_input.setTextMargins(_TEXT_MARGIN, 0, _TEXT_MARGIN, 0)
+        self._connection_input.textEdited.connect(self._on_connection_edited)
+        layout.addWidget(self._connection_input)
         layout.addSpacing(_SECTION_SPACING)
 
         buttons = QDialogButtonBox()
@@ -296,6 +317,7 @@ class MieruDialog(QDialog):
         word = self._word
         self._show_list()
         self._image_query_input.setText(word.image_query if word else "")
+        self._connection_input.setText(word.personal_connection if word else "")
         self._show_candidates()
         self._show_pictures()
         self._show_images_label()
@@ -398,20 +420,30 @@ class MieruDialog(QDialog):
             word.picture_row = row
         self._update_add_button()
 
+    def _on_connection_edited(self, text: str) -> None:
+        word = self._word
+        if word is not None:
+            word.personal_connection = text
+        self._update_add_button()
+
     def _update_add_button(self) -> None:
         word = self._word
-        self._add_button.setEnabled(
-            word is not None and word.candidate is not None and word.picture_row >= 0
-        )
+        self._add_button.setEnabled(word is not None and word.is_ready)
 
     def _add(self) -> None:
         word = self._word
-        candidate = word.candidate if word else None
-        if word is None or candidate is None or word.picture_row < 0:
+        if word is None or not word.is_ready:
             return
-        note = self.mw.col.new_note(ensure_note_type(self.mw.col))
+        candidate = word.candidate
+        assert candidate is not None
+        try:
+            notetype = ensure_note_type(self.mw.col)
+        except AbortSchemaModification:
+            return
+        note = self.mw.col.new_note(notetype)
         note[WORD_FIELD] = to_anki_furigana(candidate.word, candidate.reading)
         note[ENGLISH_FIELD] = word.query
+        note[PERSONAL_CONNECTION_FIELD] = html.escape(word.personal_connection.strip())
         if note.fields_check() == NoteFieldsCheckResult.DUPLICATE and not askUser(
             f"You already have a mieru card for {candidate.word}. Add it anyway?",
             parent=self,

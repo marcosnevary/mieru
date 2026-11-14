@@ -1,6 +1,6 @@
 # Architecture
 
-mieru is an Anki add-on. The user types an English word, picks one of the Japanese words the dictionary returns, picks a picture, and mieru adds a note whose front shows the word with furigana and plays its pronunciation, and whose back shows only the picture.
+mieru is an Anki add-on. The user types an English word, picks one of the Japanese words the dictionary returns, picks a picture, writes a personal connection to the word, and mieru adds a note with two cards: comprehension (word with furigana → picture and pronunciation) and production (picture → word and pronunciation).
 
 ## Layout
 
@@ -17,18 +17,26 @@ Inside the add-on, modules import each other relatively (`from ..core import …
 
 1. **Search.** The search field takes one English word or a list separated by commas or line breaks. On Enter, every word of the list starts loading at once, and the user moves between words with Previous/Next or by clicking a word in the list under the field. Each word keeps what was loaded and chosen for it (candidates, audio, pictures, picture search term, selections), so going back shows it as it was left. For each word, the Jisho lookup starts in the background, keyed by the English word. The word is also the initial picture search term, which starts one background search per picture source with a key configured (plus thumbnail downloads, eight at a time per source); each source's results are appended as they arrive, so with several sources a slow or failing one doesn't hold back the others. Editing that field and searching again replaces only the pictures, keeping the chosen candidate and its audio: abstract words like "nice to meet you" often need a concrete term ("handshake").
 2. **Candidate.** Each word's first candidate has its audio fetched as soon as the lookup returns, so it plays on reaching the word. Selecting another candidate fetches its audio in the background, once per candidate, and plays it when it arrives.
-3. **Add.** The full-size picture is downloaded, picture and audio are written to the collection's media folder as `mieru_<word>.<ext>`, and the note is added to the chosen deck through Anki's undoable `add_note` operation. The word is marked added and the window moves to the next word not yet added (wrapping around, so skipped words come back), or resets once every word is added.
+3. **Add.** Add stays disabled until the word has a candidate, a picture and a personal connection; the connection is kept per word like the other choices. The full-size picture is downloaded, picture and audio are written to the collection's media folder as `mieru_<word>.<ext>`, and the note is added to the chosen deck through Anki's undoable `add_note` operation. The word is marked added and the window moves to the next word not yet added (wrapping around, so skipped words come back), or resets once every word is added.
 
 Every network call runs in a `QueryOp(...).without_collection()`, so the UI never blocks and requests don't queue behind collection access. Results are stored on the word they belong to and shown only if it is the current word; pictures for a superseded picture search term are dropped. Offline, every word of a list fails at once, so only one network warning is shown at a time. The dialog is created once and reused, so late results land on a hidden window rather than a deleted one.
 
 ## Note type
 
-`mieru`, created on first use if missing. When it already exists, its template and CSS are reset to the add-on's whenever they differ, so layout changes reach existing collections; hand edits to them in Anki don't survive. Fields, in order:
+`mieru`, created on first use if missing. When it already exists, its templates and CSS are reset to the add-on's whenever they differ, so layout changes reach existing collections; hand edits to them in Anki don't survive. Missing fields and templates are added too, which is a schema change: Anki asks the user to confirm the full sync it forces, and nothing is added if they decline. Anki then generates the new cards for existing notes.
+
+Templates, matched by position:
+
+- `Comprehension`: front shows the word; back shows the word with the audio button, the picture and the personal connection.
+- `Production`: front shows the picture; back adds the word with the audio button and the personal connection.
+
+Fields, in order:
 
 - `Word`: the word in Anki furigana syntax (`食[た]べる`), rendered with `{{furigana:Word}}`. It is the first field, so Anki's duplicate check applies to it; adding a duplicate asks for confirmation.
-- `Audio`: `[sound:…]`, played on the front by the button next to the word.
-- `Image`: `<img>`, the only thing on the back.
-- `English`: the searched word (not the picture search term). Not shown on the card; kept so notes can be found in the Browser.
+- `Audio`: `[sound:…]`, on the back of both cards, next to the word.
+- `Image`: `<img>`.
+- `English`: the searched word (not the picture search term). Not shown on the cards; kept so notes can be found in the Browser.
+- `Personal Connection`: what the user wrote, HTML-escaped, at the bottom of both backs. Last because Anki appends fields added to an existing note type, so new and older collections share the field order.
 
 ## External sources
 
@@ -51,7 +59,9 @@ Picture sources are listed in `core/images.py` `SOURCES`; each needs the user's 
 - **Picture search term separate from the dictionary word.** The English word is often a poor image query for abstract vocabulary; refining it shouldn't discard the chosen Japanese candidate.
 - **Word list in the search field.** Commas or line breaks in the same field instead of a separate list widget, so adding a single word works as before.
 - **Whole list loaded up front.** Moving between words never waits, at the cost of requests for words that end up skipped. Pixabay allows 100 requests a minute per key, so a list of more than about 100 words would hit its limit.
-- **Back shows only the picture.** The picture is the answer; the English word is stored but hidden so it can't be read instead of recalling the meaning.
+- **Comprehension and production cards on one note type.** Recognising the word and recalling it from the picture are different skills, so each note is reviewed in both directions. One note type keeps a single note per word, and older notes gain the production card automatically, at the cost of one full sync. The English word stays hidden on both so it can't be read instead of recalling the meaning.
+- **Audio on the back only.** Hearing the word on the front would give away the production answer and let the comprehension card be answered by ear instead of by reading.
+- **Personal connection required.** Linking the word to something of one's own makes it stick; making it optional would let it be skipped every time.
 - **W opens the window.** A single key like Anki's own A (Add) and B (Browse), reachable with the left hand alone. M was rejected because the reviewer already uses it for its More menu, and two shortcuts on one key make Qt fire neither.
 - **`requests` over `urllib`.** Anki already bundles it, so it adds nothing to the package.
 - **PyQt6 pinned to Anki's bundled version in dev.** Type stubs then match what runs, and PyQt6 6.12's stubs don't parse under mypy.

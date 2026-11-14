@@ -1,4 +1,5 @@
-"""The "mieru" note type: Japanese word with furigana and audio, picture as the answer."""
+"""The "mieru" note type: a comprehension card (word → picture) and a production
+card (picture → word), both with audio and the user's personal connection on the back."""
 
 from __future__ import annotations
 
@@ -13,16 +14,32 @@ AUDIO_FIELD = "Audio"
 IMAGE_FIELD = "Image"
 # Not shown on the card; kept so notes can be searched by the English word.
 ENGLISH_FIELD = "English"
-FIELDS = (WORD_FIELD, AUDIO_FIELD, IMAGE_FIELD, ENGLISH_FIELD)
+PERSONAL_CONNECTION_FIELD = "Personal Connection"
+# Last because Anki appends fields added to an existing note type, so new and
+# migrated note types end up in the same order.
+FIELDS = (WORD_FIELD, AUDIO_FIELD, IMAGE_FIELD, ENGLISH_FIELD, PERSONAL_CONNECTION_FIELD)
 
-_FRONT_TEMPLATE = (
-    f'<div class="heading"><span class="word">{{{{furigana:{WORD_FIELD}}}}}</span>'
-    f"{{{{{AUDIO_FIELD}}}}}</div>"
+_WORD = f'<span class="word">{{{{furigana:{WORD_FIELD}}}}}</span>'
+_AUDIO = f"{{{{{AUDIO_FIELD}}}}}"
+_PICTURE = f"{{{{{IMAGE_FIELD}}}}}"
+_CONNECTION = f'<div class="connection">{{{{{PERSONAL_CONNECTION_FIELD}}}}}</div>'
+
+# No <hr> divider, but id="answer" stays on each back: Anki scrolls to it when
+# showing the answer.
+_TEMPLATES = (
+    (
+        "Comprehension",
+        f'<div class="heading">{_WORD}</div>',
+        f'<div class="heading">{_WORD}{_AUDIO}</div>\n'
+        f'<div id="answer" class="picture">{_PICTURE}</div>\n'
+        f"{_CONNECTION}",
+    ),
+    (
+        "Production",
+        f'<div class="picture">{_PICTURE}</div>',
+        f'{{{{FrontSide}}}}\n<div id="answer" class="heading">{_WORD}{_AUDIO}</div>\n{_CONNECTION}',
+    ),
 )
-
-# No <hr> divider, but id="answer" stays: Anki scrolls to it when showing the answer.
-_BACK_TEMPLATE = f"""{{{{FrontSide}}}}
-<div id="answer" class="picture">{{{{{IMAGE_FIELD}}}}}</div>"""
 
 _CSS = """.card {
   font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif;
@@ -48,39 +65,70 @@ _CSS = """.card {
 .picture img {
   max-width: 100%;
   max-height: 60vh;
+}
+
+.connection {
+  margin-top: 1em;
+  font-size: 0.4em;
 }"""
 
 
 def ensure_note_type(col: Collection) -> NotetypeDict:
     """Return the mieru note type, creating it the first time.
 
-    An existing note type gets the add-on's current template and CSS back, so
-    layout changes reach collections created by older versions.
+    An existing note type gets missing fields and templates added, and the
+    add-on's current templates and CSS back, so changes reach collections
+    created by older versions. Adding fields or templates is a schema change:
+    Anki asks the user to confirm the full sync it requires, and raises
+    AbortSchemaModification if they decline.
     """
-    if existing := col.models.by_name(NOTE_TYPE_NAME):
-        template = existing["tmpls"][0]
-        if (template["qfmt"], template["afmt"], existing["css"]) != (
-            _FRONT_TEMPLATE,
-            _BACK_TEMPLATE,
-            _CSS,
-        ):
-            template["qfmt"] = _FRONT_TEMPLATE
-            template["afmt"] = _BACK_TEMPLATE
-            existing["css"] = _CSS
-            col.models.update_dict(existing)
-        return existing
+    models = col.models
+    if existing := models.by_name(NOTE_TYPE_NAME):
+        _update(col, existing)
+    else:
+        _create(col)
 
+    # Reloaded: fields and templates only get their ordinals once saved.
+    notetype = models.by_name(NOTE_TYPE_NAME)
+    assert notetype is not None
+    return notetype
+
+
+def _create(col: Collection) -> None:
     models = col.models
     notetype = models.new(NOTE_TYPE_NAME)
     for name in FIELDS:
         models.add_field(notetype, models.new_field(name))
-    template = models.new_template("Word → Picture")
-    template["qfmt"] = _FRONT_TEMPLATE
-    template["afmt"] = _BACK_TEMPLATE
-    models.add_template(notetype, template)
-    notetype["css"] = _CSS
+    for name, _front, _back in _TEMPLATES:
+        models.add_template(notetype, models.new_template(name))
+    _apply_layout(notetype)
     models.add_dict(notetype)
 
-    created = models.by_name(NOTE_TYPE_NAME)
-    assert created is not None
-    return created
+
+def _update(col: Collection, notetype: NotetypeDict) -> None:
+    models = col.models
+    missing_fields = [name for name in FIELDS if name not in models.field_names(notetype)]
+    missing_templates = [name for name, _front, _back in _TEMPLATES[len(notetype["tmpls"]) :]]
+    if missing_fields or missing_templates:
+        col.mod_schema(check=True)
+    for name in missing_fields:
+        models.add_field(notetype, models.new_field(name))
+    for name in missing_templates:
+        models.add_template(notetype, models.new_template(name))
+
+    layout_changed = _apply_layout(notetype)
+    if missing_fields or missing_templates or layout_changed:
+        models.update_dict(notetype)
+
+
+def _apply_layout(notetype: NotetypeDict) -> bool:
+    """Set the templates and CSS to the add-on's; return whether anything changed."""
+    changed = False
+    for template, (name, front, back) in zip(notetype["tmpls"], _TEMPLATES):
+        if (template["name"], template["qfmt"], template["afmt"]) != (name, front, back):
+            template["name"], template["qfmt"], template["afmt"] = name, front, back
+            changed = True
+    if notetype["css"] != _CSS:
+        notetype["css"] = _CSS
+        changed = True
+    return changed
