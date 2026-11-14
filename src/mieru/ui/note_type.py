@@ -15,12 +15,14 @@ IMAGE_FIELD = "Image"
 ENGLISH_FIELD = "English"
 FIELDS = (WORD_FIELD, AUDIO_FIELD, IMAGE_FIELD, ENGLISH_FIELD)
 
-_FRONT_TEMPLATE = f"""<div class="word">{{{{furigana:{WORD_FIELD}}}}}</div>
-{{{{{AUDIO_FIELD}}}}}"""
+_FRONT_TEMPLATE = (
+    f'<div class="heading"><span class="word">{{{{furigana:{WORD_FIELD}}}}}</span>'
+    f"{{{{{AUDIO_FIELD}}}}}</div>"
+)
 
+# No <hr> divider, but id="answer" stays: Anki scrolls to it when showing the answer.
 _BACK_TEMPLATE = f"""{{{{FrontSide}}}}
-<hr id="answer">
-<div class="picture">{{{{{IMAGE_FIELD}}}}}</div>"""
+<div id="answer" class="picture">{{{{{IMAGE_FIELD}}}}}</div>"""
 
 _CSS = """.card {
   font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif;
@@ -28,8 +30,19 @@ _CSS = """.card {
   text-align: center;
 }
 
+.heading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3em;
+}
+
 .word rt {
   font-size: 0.45em;
+}
+
+.picture {
+  margin-top: 0.5em;
 }
 
 .picture img {
@@ -39,8 +52,22 @@ _CSS = """.card {
 
 
 def ensure_note_type(col: Collection) -> NotetypeDict:
-    """Return the mieru note type, creating it the first time."""
+    """Return the mieru note type, creating it the first time.
+
+    An existing note type gets the add-on's current template and CSS back, so
+    layout changes reach collections created by older versions.
+    """
     if existing := col.models.by_name(NOTE_TYPE_NAME):
+        template = existing["tmpls"][0]
+        if (template["qfmt"], template["afmt"], existing["css"]) != (
+            _FRONT_TEMPLATE,
+            _BACK_TEMPLATE,
+            _CSS,
+        ):
+            template["qfmt"] = _FRONT_TEMPLATE
+            template["afmt"] = _BACK_TEMPLATE
+            existing["css"] = _CSS
+            col.models.update_dict(existing)
         return existing
 
     models = col.models

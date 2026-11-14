@@ -38,8 +38,28 @@ def test_shows_word_with_furigana_and_audio_on_front_and_only_the_picture_behind
     question = card.question()
     answer = card.answer()
 
-    assert "<ruby><rb>食</rb><rt>た</rt></ruby>べる" in question
-    assert "[anki:play:q:0]" in question
+    heading = question[question.index('<div class="heading">') :]
+    heading = heading[: heading.index("</div>")]
+    assert "<ruby><rb>食</rb><rt>た</rt></ruby>べる" in heading
+    assert "[anki:play:q:0]" in heading
     assert "mieru_食べる.jpg" not in question
     assert "mieru_食べる.jpg" in answer
+    assert "<hr" not in answer
     assert "to eat" not in answer
+
+
+def test_restores_the_template_and_css_of_an_existing_note_type(col: Collection) -> None:
+    original = ensure_note_type(col)
+    front, back, css = original["tmpls"][0]["qfmt"], original["tmpls"][0]["afmt"], original["css"]
+    original["tmpls"][0]["qfmt"] = "{{Word}}"
+    original["tmpls"][0]["afmt"] = "{{FrontSide}}<hr id=answer>{{Image}}"
+    original["css"] = ".card {}"
+    col.models.update_dict(original)
+
+    ensure_note_type(col)
+
+    restored = col.models.by_name(NOTE_TYPE_NAME)
+    assert restored is not None
+    assert restored["tmpls"][0]["qfmt"] == front
+    assert restored["tmpls"][0]["afmt"] == back
+    assert restored["css"] == css

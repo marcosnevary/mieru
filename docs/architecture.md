@@ -23,10 +23,10 @@ Every network call runs in a `QueryOp(...).without_collection()`, so the UI neve
 
 ## Note type
 
-`mieru`, created on first use if missing. Fields, in order:
+`mieru`, created on first use if missing. When it already exists, its template and CSS are reset to the add-on's whenever they differ, so layout changes reach existing collections; hand edits to them in Anki don't survive. Fields, in order:
 
 - `Word`: the word in Anki furigana syntax (`食[た]べる`), rendered with `{{furigana:Word}}`. It is the first field, so Anki's duplicate check applies to it; adding a duplicate asks for confirmation.
-- `Audio`: `[sound:…]`, played on the front.
+- `Audio`: `[sound:…]`, played on the front by the button next to the word.
 - `Image`: `<img>`, the only thing on the back.
 - `English`: the searched word. Not shown on the card; kept so notes can be found in the Browser.
 
