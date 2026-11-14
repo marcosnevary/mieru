@@ -44,18 +44,25 @@ def test_creates_the_note_type_once(col: Collection) -> None:
 
 
 def test_comprehension_card_shows_the_word_and_answers_with_picture_audio_and_connection(
-    cards: list[Card],
+    col: Collection, cards: list[Card]
 ) -> None:
     question = cards[0].question()
     answer = cards[0].answer()
 
     assert _RUBY_WORD in question
+    assert 'class="word no-furigana"' in question
+    assert 'class="word no-furigana"' not in answer
+    assert ".no-furigana rt" in ensure_note_type(col)["css"]
     assert "[anki:play" not in question
     assert _PICTURE not in question
     assert _PICTURE in answer
-    assert "[anki:play:a:0]" in answer
+    assert (
+        f'<div id="answer" class="heading"><span class="word">{_RUBY_WORD}</span>'
+        "[anki:play:a:0]</div>"
+    ) in answer
+    assert '<div class="audio">' not in answer
     assert _CONNECTION in answer
-    assert "<hr" not in answer
+    assert answer.count('<hr class="divider">') == 2
     assert "to eat" not in answer
     assert _STROKE_ORDER not in answer
 
@@ -70,9 +77,13 @@ def test_production_card_shows_the_picture_and_answers_with_word_audio_and_conne
     assert _RUBY_WORD not in question
     assert "[anki:play" not in question
     assert _RUBY_WORD in answer
-    assert "[anki:play:a:0]" in answer
+    assert (
+        f'<div id="answer" class="heading"><span class="word">{_RUBY_WORD}</span>'
+        "[anki:play:a:0]</div>"
+    ) in answer
+    assert '<div class="audio">' not in answer
     assert _CONNECTION in answer
-    assert "<hr" not in answer
+    assert answer.count('<hr class="divider">') == 2
     assert "to eat" not in answer
     assert _STROKE_ORDER not in answer
 
@@ -86,12 +97,17 @@ def test_writing_card_shows_picture_audio_and_drawing_area_and_answers_with_stro
     assert _PICTURE in question
     assert "[anki:play:q:0]" in question
     assert "<canvas>" in question
+    assert (
+        '<div class="audio">[anki:play:q:0]</div>\n'
+        '<hr class="divider">\n<div class="mieru-drawing">'
+    ) in question
     assert _RUBY_WORD not in question
     assert _RUBY_WORD not in answer
     assert "<canvas>" in answer
     assert f'<div class="mieru-guide"><img src="{_STROKE_ORDER}"></div>' in answer
     assert _CONNECTION in answer
-    assert "<hr" not in answer
+    assert answer.count('<hr class="divider">') == 2
+    assert '<hr class="divider">\n<div class="connection">' in answer
     assert "to eat" not in answer
 
 

@@ -1,6 +1,6 @@
 # mieru
 
-Anki add-on: English word → Japanese card (furigana + audio on the front, a chosen picture on the back). Product: `PRODUCT.md`. Architecture and external APIs: `docs/architecture.md`.
+Anki add-on: English word → Japanese card (word on the front; furigana, audio and a chosen picture on the back). Product: `PRODUCT.md`. Architecture and external APIs: `docs/architecture.md`.
 
 ## Commands
 

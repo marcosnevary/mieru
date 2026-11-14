@@ -1,6 +1,6 @@
 # mieru
 
-Anki add-on that turns an English word into a Japanese flashcard: the front shows the word with furigana and plays its pronunciation, the back shows a picture you choose.
+Anki add-on that turns an English word into a Japanese flashcard: the front shows the word, the back shows its furigana and pronunciation, and a picture you choose.
 
 ## Using it
 

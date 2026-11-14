@@ -31,10 +31,15 @@ FIELDS = (
 )
 
 _WORD = f'<span class="word">{{{{furigana:{WORD_FIELD}}}}}</span>'
+# On the comprehension front the reading would give the pronunciation away, so CSS
+# hides it there; the back uses the word with furigana.
+_WORD_NO_FURIGANA = f'<span class="word no-furigana">{{{{furigana:{WORD_FIELD}}}}}</span>'
 _AUDIO = f"{{{{{AUDIO_FIELD}}}}}"
 _AUDIO_ROW = f'<div class="audio">{_AUDIO}</div>'
 _PICTURE = f"{{{{{IMAGE_FIELD}}}}}"
 _CONNECTION = f'<div class="connection">{{{{{PERSONAL_CONNECTION_FIELD}}}}}</div>'
+# A plain <hr>: Anki's answer marker stays on the content itself.
+_DIVIDER = '<hr class="divider">'
 
 # {{FrontSide}} recreates the canvas empty on the back, so the drawing is saved
 # after each stroke and redrawn there. sessionStorage survives the page reload some
@@ -160,25 +165,28 @@ _DRAWING = (
     f"{_DRAWING_SCRIPT}"
 )
 
-# No <hr> divider, but id="answer" stays on each back: Anki scrolls to it when
-# showing the answer.
+# `id="answer"` stays on each back, on the first block rather than on a divider,
+# so Anki scrolls to the answer when showing it.
 _TEMPLATES = (
     (
         "Comprehension",
-        f'<div class="heading">{_WORD}</div>',
-        f'<div class="heading">{_WORD}</div>\n'
-        f'<div id="answer" class="picture">{_PICTURE}</div>\n'
-        f"{_AUDIO_ROW}\n{_CONNECTION}",
+        f'<div class="heading">{_WORD_NO_FURIGANA}</div>',
+        f'<div id="answer" class="heading">{_WORD}{_AUDIO}</div>\n'
+        f"{_DIVIDER}\n"
+        f'<div class="picture">{_PICTURE}</div>\n'
+        f"{_DIVIDER}\n"
+        f"{_CONNECTION}",
     ),
     (
         "Production",
         f'<div class="picture">{_PICTURE}</div>',
-        f'{{{{FrontSide}}}}\n<div id="answer" class="audio">{_AUDIO}</div>\n'
-        f'<div class="heading">{_WORD}</div>\n{_CONNECTION}',
+        f"{{{{FrontSide}}}}\n{_DIVIDER}\n"
+        f'<div id="answer" class="heading">{_WORD}{_AUDIO}</div>\n'
+        f"{_DIVIDER}\n{_CONNECTION}",
     ),
     (
         "Writing",
-        f'<div class="picture">{_PICTURE}</div>\n{_AUDIO_ROW}\n{_DRAWING}',
+        f'<div class="picture">{_PICTURE}</div>\n{_AUDIO_ROW}\n{_DIVIDER}\n{_DRAWING}',
         # The stroke order behind the drawing is the answer; the word stands in only
         # for notes added before stroke order existed. The empty #answer is also how
         # the drawing script knows it is on the back.
@@ -186,6 +194,7 @@ _TEMPLATES = (
         f"{{{{^{STROKE_ORDER_FIELD}}}}}"
         f'<div class="heading">{_WORD}</div>'
         f"{{{{/{STROKE_ORDER_FIELD}}}}}\n"
+        f"{_DIVIDER}\n"
         f"{_CONNECTION}",
     ),
 )
@@ -205,6 +214,16 @@ _CSS = """.card {
 
 .word rt {
   font-size: 0.45em;
+  /* Blue stands out from the kanji in both light and night mode. */
+  color: #1d4ed8;
+}
+
+.nightMode .word rt {
+  color: #93c5fd;
+}
+
+.no-furigana rt {
+  display: none;
 }
 
 .picture {
@@ -278,14 +297,35 @@ _CSS = """.card {
     brightness(101%) contrast(79%);
 }
 
-/* The word when it follows the picture and audio, on the production and writing backs. */
-.audio ~ .heading {
+/* The word when it follows the picture, on the production and writing backs. */
+.picture ~ .heading {
   margin-top: 0.4em;
 }
 
 .connection {
   margin-top: 0.25em;
   font-size: 0.4em;
+  /* The system font sets the personal note apart from the Japanese text. */
+  font-family: system-ui, sans-serif;
+  color: #6b7280;
+}
+
+.nightMode .connection {
+  color: #d1d5db;
+}
+
+.divider {
+  height: 1px;
+  margin: 0.4em 0;
+  border: none;
+  background-color: rgba(128, 128, 128, 0.4);
+}
+
+/* The divider's margins set the spacing; the blocks after it add none of their own. */
+.divider + .picture,
+.divider + .heading,
+.divider + .connection {
+  margin-top: 0;
 }"""
 
 

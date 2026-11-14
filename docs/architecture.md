@@ -1,6 +1,6 @@
 # Architecture
 
-mieru is an Anki add-on. The user types an English word, picks one of the Japanese words the dictionary returns, picks a picture, writes a personal connection to the word, and mieru adds a note with three cards: comprehension (word with furigana → picture and pronunciation), production (picture → word and pronunciation) and writing (picture and pronunciation → the word drawn by hand).
+mieru is an Anki add-on. The user types an English word, picks one of the Japanese words the dictionary returns, picks a picture, writes a personal connection to the word, and mieru adds a note with three cards: comprehension (word without furigana → picture and pronunciation, with the reading on the back), production (picture → word and pronunciation) and writing (picture and pronunciation → the word drawn by hand).
 
 ## Layout
 
@@ -27,17 +27,19 @@ Every network call runs in a `QueryOp(...).without_collection()`, so the UI neve
 
 Templates, matched by position:
 
-- `Comprehension`: front shows the word; back shows the word, the picture with the audio button under it, and the personal connection.
-- `Production`: front shows the picture; back adds the audio button under it, the word and the personal connection.
+- `Comprehension`: front shows the word without furigana; back shows the word with furigana and the audio button beside it, the picture, and the personal connection.
+- `Production`: front shows the picture; back adds the word with the audio button beside it and the personal connection.
 - `Writing`: front shows the picture with the audio button under it, plays the audio and has a drawing area with a Clear button; back keeps the drawing (read-only) over the word's stroke order, faded, inside the same area, and adds the personal connection, for the user to compare and grade themselves. The word itself is left out, since the stroke order already shows it; it appears only on notes without stroke order (added before it existed), which would otherwise have no answer. The stroke order is part of the front's HTML, hidden by CSS, because the back's drawing area comes from `{{FrontSide}}`; the script reveals it on the back. `{{FrontSide}}` recreates the canvas empty, so the template's script saves the drawing as a data URL in `sessionStorage` after each stroke and redraws it on the back; the front starts by clearing it. The drawing area's classes are prefixed `mieru-` because Anki's reviewer CSS styles `.drawing` with `zoom: 50%`.
+
+The backs of comprehension and production separate their blocks with a thin divider: word, picture and personal connection. The writing card separates the picture (with its audio button) from the drawing area, and the drawing area from the personal connection.
 
 Fields, in order:
 
-- `Word`: the word in Anki furigana syntax (`食[た]べる`), rendered with `{{furigana:Word}}`. It is the first field, so Anki's duplicate check applies to it; adding a duplicate asks for confirmation.
-- `Audio`: `[sound:…]`, under the picture on every card: on the back of comprehension and production, on the front of writing.
+- `Word`: the word in Anki furigana syntax (`食[た]べる`), rendered with `{{furigana:Word}}`, the reading in blue (lighter in night mode) so it stands apart from the kanji. It is the first field, so Anki's duplicate check applies to it; adding a duplicate asks for confirmation.
+- `Audio`: `[sound:…]`, beside the word on the back of comprehension and production, under the picture on the front of writing.
 - `Image`: `<img>`.
 - `English`: the searched word (not the picture search term). Not shown on the cards; kept so notes can be found in the Browser.
-- `Personal Connection`: what the user wrote, HTML-escaped, at the bottom of every back.
+- `Personal Connection`: what the user wrote, HTML-escaped, at the bottom of every back, set in the system font and light gray (lighter in night mode) to stand apart from the Japanese text.
 - `Stroke Order`: one `<img>` per distinct character of the word, behind the drawing on the back of the writing card only. KanjiVG draws in black, like the pencil, so a CSS filter turns the diagrams red in both light and night mode; the files themselves stay unchanged. Empty for notes added before it existed, and the card then shows none.
 
 Fields added after the first release come last because Anki appends fields added to an existing note type, so new and older collections share the field order.
@@ -67,6 +69,7 @@ Picture sources are listed in `core/images.py` `SOURCES`; each needs the user's 
 - **Whole list loaded up front.** Moving between words never waits, at the cost of requests for words that end up skipped. Pixabay allows 100 requests a minute per key, so a list of more than about 100 words would hit its limit.
 - **Comprehension and production cards on one note type.** Recognising the word and recalling it from the picture are different skills, so each note is reviewed in both directions. One note type keeps a single note per word, and older notes gain the production card automatically, at the cost of one full sync. The English word stays hidden on every card so it can't be read instead of recalling the meaning.
 - **Audio on the back of comprehension and production.** Hearing the word on the front would give away the production answer and let the comprehension card be answered by ear instead of by reading. On the writing card the audio is the cue, as in a dictation: the skill tested is writing the word, not recalling it.
+- **Furigana on the comprehension back only.** The reading on the front would give away the pronunciation, turning recognition of the word into reading its ruby. Hiding the `<rt>` elements with a class on the front template needs no field, no script and no schema change, and works on every client.
 - **Drawing canvas in the writing template.** Writing by hand fixes the shape of the kanji. A canvas in the template works in Anki desktop, AnkiDroid and AnkiMobile without another add-on. `{{type:}}` was rejected because it tests typing through an IME, not writing; the mobile apps' whiteboards because desktop has none. There is no automatic check: the user compares the drawing with the stroke order laid behind it.
 - **KanjiVG stored in the media folder.** Downloaded at add time, the diagrams work offline and sync to mobile like the picture and audio. Loading them from a CDN in the card script was rejected because reviews often happen offline; a stroke order font because it shows only static numbers and would have to be shipped in every collection.
 - **Personal connection required.** Linking the word to something of one's own makes it stick; making it optional would let it be skipped every time.
