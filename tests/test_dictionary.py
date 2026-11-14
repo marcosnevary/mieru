@@ -1,6 +1,6 @@
 from conftest import load_fixture
 
-from mieru.core.dictionary import parse_jisho
+from mieru.core.dictionary import parse_jisho, split_queries
 
 
 def test_lists_common_words_before_phrases_containing_the_query() -> None:
@@ -35,3 +35,15 @@ def test_skips_entries_without_a_reading() -> None:
     words = [c.word for c in parse_jisho(load_fixture("jisho_tomato.json"))]
 
     assert "トマト缶" not in words
+
+
+def test_splits_a_word_list_on_commas_and_line_breaks() -> None:
+    assert split_queries("dog, cat\nnice to meet you") == ["dog", "cat", "nice to meet you"]
+
+
+def test_keeps_a_single_word_as_is() -> None:
+    assert split_queries("  dog ") == ["dog"]
+
+
+def test_drops_empty_and_repeated_words() -> None:
+    assert split_queries("dog,, cat,\n\ndog, ") == ["dog", "cat"]

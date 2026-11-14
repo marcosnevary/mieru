@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -16,6 +17,11 @@ class Candidate:
     reading: str
     meanings: tuple[str, ...]
     is_common: bool
+
+
+def split_queries(text: str) -> list[str]:
+    queries = (query.strip() for query in re.split(r"[,\n]", text))
+    return list(dict.fromkeys(query for query in queries if query))
 
 
 def search(english: str) -> list[Candidate]:
