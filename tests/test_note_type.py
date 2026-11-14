@@ -12,6 +12,7 @@ from mieru.ui.note_type import NOTE_TYPE_NAME, ensure_note_type
 _RUBY_WORD = "<ruby><rb>食</rb><rt>た</rt></ruby>べる"
 _PICTURE = "mieru_食べる.jpg"
 _CONNECTION = "Lunch with grandma"
+_STROKE_ORDER = "mieru_stroke_order_食.svg"
 
 
 @pytest.fixture
@@ -29,6 +30,7 @@ def cards(col: Collection) -> list[Card]:
     note["Image"] = f'<img src="{_PICTURE}">'
     note["English"] = "to eat"
     note["Personal Connection"] = _CONNECTION
+    note["Stroke Order"] = f'<img src="{_STROKE_ORDER}">'
     col.add_note(note, col.decks.get_current_id())
     return sorted(note.cards(), key=lambda card: card.ord)
 
@@ -55,6 +57,7 @@ def test_comprehension_card_shows_the_word_and_answers_with_picture_audio_and_co
     assert _CONNECTION in answer
     assert "<hr" not in answer
     assert "to eat" not in answer
+    assert _STROKE_ORDER not in answer
 
 
 def test_production_card_shows_the_picture_and_answers_with_word_audio_and_connection(
@@ -71,12 +74,41 @@ def test_production_card_shows_the_picture_and_answers_with_word_audio_and_conne
     assert _CONNECTION in answer
     assert "<hr" not in answer
     assert "to eat" not in answer
+    assert _STROKE_ORDER not in answer
+
+
+def test_writing_card_shows_picture_audio_and_drawing_area_and_answers_with_stroke_order(
+    cards: list[Card],
+) -> None:
+    question = cards[2].question()
+    answer = cards[2].answer()
+
+    assert _PICTURE in question
+    assert "[anki:play:q:0]" in question
+    assert "<canvas>" in question
+    assert _RUBY_WORD not in question
+    assert _RUBY_WORD not in answer
+    assert "<canvas>" in answer
+    assert f'<div class="mieru-guide"><img src="{_STROKE_ORDER}"></div>' in answer
+    assert _CONNECTION in answer
+    assert "<hr" not in answer
+    assert "to eat" not in answer
+
+
+def test_writing_card_answers_with_the_word_when_there_is_no_stroke_order(
+    col: Collection, cards: list[Card]
+) -> None:
+    note = cards[2].note()
+    note["Stroke Order"] = ""
+    col.update_note(note)
+
+    assert _RUBY_WORD in note.cards()[2].answer()
 
 
 def test_restores_the_templates_and_css_of_an_existing_note_type(col: Collection) -> None:
     original = ensure_note_type(col)
     expected = [(t["name"], t["qfmt"], t["afmt"]) for t in original["tmpls"]], original["css"]
-    for template, front in zip(original["tmpls"], ("{{Word}}", "{{Image}}")):
+    for template, front in zip(original["tmpls"], ("{{Word}}", "{{Image}}", "{{Audio}}")):
         template["name"] += " edited"
         template["qfmt"] = front
         template["afmt"] = "{{FrontSide}}<hr id=answer>{{Image}}"
@@ -90,7 +122,7 @@ def test_restores_the_templates_and_css_of_an_existing_note_type(col: Collection
     )
 
 
-def test_adds_the_production_card_and_connection_to_an_older_note_type(
+def test_adds_the_missing_cards_and_connection_to_an_older_note_type(
     col: Collection,
 ) -> None:
     models = col.models
@@ -115,7 +147,25 @@ def test_adds_the_production_card_and_connection_to_an_older_note_type(
         "Image",
         "English",
         "Personal Connection",
+        "Stroke Order",
     ]
-    assert [t["name"] for t in notetype["tmpls"]] == ["Comprehension", "Production"]
+    assert [t["name"] for t in notetype["tmpls"]] == ["Comprehension", "Production", "Writing"]
     older_note.load()
-    assert len(older_note.cards()) == 2
+    assert len(older_note.cards()) == 3
+
+
+def test_adds_the_writing_card_to_a_note_type_with_two_cards(col: Collection) -> None:
+    models = col.models
+    notetype = ensure_note_type(col)
+    models.remove_template(notetype, notetype["tmpls"][2])
+    models.update_dict(notetype)
+    note = col.new_note(models.by_name(NOTE_TYPE_NAME))  # type: ignore[arg-type]
+    note["Word"] = "犬[いぬ]"
+    note["Image"] = '<img src="mieru_犬.jpg">'
+    col.add_note(note, col.decks.get_current_id())
+    assert len(note.cards()) == 2
+
+    notetype = ensure_note_type(col)
+
+    assert [t["name"] for t in notetype["tmpls"]] == ["Comprehension", "Production", "Writing"]
+    assert len(note.cards()) == 3

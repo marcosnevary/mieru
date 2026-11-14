@@ -1,5 +1,7 @@
-"""The "mieru" note type: a comprehension card (word → picture) and a production
-card (picture → word), both with audio and the user's personal connection on the back."""
+"""The "mieru" note type: a comprehension card (word → picture), a production card
+(picture → word) and a writing card (picture and audio → the word drawn by hand,
+checked against its stroke order), all with the user's personal connection on the
+back."""
 
 from __future__ import annotations
 
@@ -15,15 +17,148 @@ IMAGE_FIELD = "Image"
 # Not shown on the card; kept so notes can be searched by the English word.
 ENGLISH_FIELD = "English"
 PERSONAL_CONNECTION_FIELD = "Personal Connection"
-# Last because Anki appends fields added to an existing note type, so new and
-# migrated note types end up in the same order.
-FIELDS = (WORD_FIELD, AUDIO_FIELD, IMAGE_FIELD, ENGLISH_FIELD, PERSONAL_CONNECTION_FIELD)
+# KanjiVG diagrams (<img> tags) for the writing card.
+STROKE_ORDER_FIELD = "Stroke Order"
+# Later additions come last because Anki appends fields added to an existing note
+# type, so new and migrated note types end up in the same order.
+FIELDS = (
+    WORD_FIELD,
+    AUDIO_FIELD,
+    IMAGE_FIELD,
+    ENGLISH_FIELD,
+    PERSONAL_CONNECTION_FIELD,
+    STROKE_ORDER_FIELD,
+)
 
 _WORD = f'<span class="word">{{{{furigana:{WORD_FIELD}}}}}</span>'
 _AUDIO = f"{{{{{AUDIO_FIELD}}}}}"
 _AUDIO_ROW = f'<div class="audio">{_AUDIO}</div>'
 _PICTURE = f"{{{{{IMAGE_FIELD}}}}}"
 _CONNECTION = f'<div class="connection">{{{{{PERSONAL_CONNECTION_FIELD}}}}}</div>'
+
+# {{FrontSide}} recreates the canvas empty on the back, so the drawing is saved
+# after each stroke and redrawn there. sessionStorage survives the page reload some
+# mobile clients do between sides; the window fallback covers clients that block it.
+# The class is prefixed because Anki's reviewer CSS already styles .drawing
+# (zoom: 50%, for its LaTeX images), which shrank the area and threw off pointers.
+# Pages can still be zoomed (Anki zooms the body on high-DPI Windows and Linux) or
+# resized, so pointer positions are mapped through the canvas's on-screen box and a
+# ResizeObserver keeps its bitmap matching that box. Anki sets the night mode class
+# only after running card scripts, so the stroke color is read when drawing.
+# The IIFE keeps the constants out of the page's global scope, which desktop Anki
+# keeps across cards. The button is blurred after a click so Space shows the
+# answer instead of clicking it again.
+_DRAWING_SCRIPT = """<script>
+(() => {
+  const KEY = "mieru-drawing";
+  const LINE_WIDTH = 6;
+  const area = document.querySelector(".mieru-drawing");
+  const canvas = area.querySelector("canvas");
+  const button = area.querySelector("button");
+  const context = canvas.getContext("2d");
+  const isBack = document.getElementById("answer") !== null;
+
+  const save = (value) => {
+    window.mieruDrawing = value;
+    try {
+      if (value) sessionStorage.setItem(KEY, value);
+      else sessionStorage.removeItem(KEY);
+    } catch (error) {}
+  };
+  const load = () => {
+    try {
+      return sessionStorage.getItem(KEY) || window.mieruDrawing;
+    } catch (error) {
+      return window.mieruDrawing;
+    }
+  };
+
+  let drawing = isBack ? load() : null;
+  const fit = () => {
+    const box = canvas.getBoundingClientRect();
+    const scale = window.devicePixelRatio || 1;
+    const width = Math.round(box.width * scale);
+    const height = Math.round(box.height * scale);
+    if (width === 0 || (width === canvas.width && height === canvas.height)) return;
+    canvas.width = width;
+    canvas.height = height;
+    if (drawing) {
+      const image = new Image();
+      image.onload = () => context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      image.src = drawing;
+    }
+  };
+  fit();
+  if (window.ResizeObserver) new ResizeObserver(fit).observe(canvas);
+
+  if (isBack) {
+    area.classList.add("mieru-answer");
+    button.hidden = true;
+    return;
+  }
+
+  save(null);
+  let last = null;
+  const pointAt = (event) => {
+    const box = canvas.getBoundingClientRect();
+    return {
+      x: ((event.clientX - box.left) * canvas.width) / box.width,
+      y: ((event.clientY - box.top) * canvas.height) / box.height,
+    };
+  };
+  const strokeTo = (point) => {
+    context.lineWidth = (LINE_WIDTH * canvas.width) / canvas.getBoundingClientRect().width;
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    context.strokeStyle = getComputedStyle(canvas).color;
+    context.beginPath();
+    context.moveTo(last.x, last.y);
+    context.lineTo(point.x, point.y);
+    context.stroke();
+    last = point;
+  };
+  canvas.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    fit();
+    canvas.setPointerCapture(event.pointerId);
+    last = pointAt(event);
+    strokeTo(last);
+  });
+  canvas.addEventListener("pointermove", (event) => {
+    if (last === null) return;
+    event.preventDefault();
+    strokeTo(pointAt(event));
+  });
+  const end = () => {
+    if (last === null) return;
+    last = null;
+    drawing = canvas.toDataURL();
+    save(drawing);
+  };
+  canvas.addEventListener("pointerup", end);
+  canvas.addEventListener("pointercancel", end);
+  button.addEventListener("click", () => {
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    drawing = null;
+    save(null);
+    button.blur();
+  });
+})();
+</script>"""
+
+# The stroke order sits behind the canvas so the drawing can be laid over it. It is
+# part of the front, where CSS hides it, because the back's copy of the canvas
+# comes from {{FrontSide}}; the script reveals it there.
+_DRAWING = (
+    '<div class="mieru-drawing">\n'
+    '<div class="mieru-surface">\n'
+    f'<div class="mieru-guide">{{{{{STROKE_ORDER_FIELD}}}}}</div>\n'
+    "<canvas></canvas>\n"
+    "</div>\n"
+    '<button type="button">Clear</button>\n'
+    "</div>\n"
+    f"{_DRAWING_SCRIPT}"
+)
 
 # No <hr> divider, but id="answer" stays on each back: Anki scrolls to it when
 # showing the answer.
@@ -40,6 +175,18 @@ _TEMPLATES = (
         f'<div class="picture">{_PICTURE}</div>',
         f'{{{{FrontSide}}}}\n<div id="answer" class="audio">{_AUDIO}</div>\n'
         f'<div class="heading">{_WORD}</div>\n{_CONNECTION}',
+    ),
+    (
+        "Writing",
+        f'<div class="picture">{_PICTURE}</div>\n{_AUDIO_ROW}\n{_DRAWING}',
+        # The stroke order behind the drawing is the answer; the word stands in only
+        # for notes added before stroke order existed. The empty #answer is also how
+        # the drawing script knows it is on the back.
+        f'{{{{FrontSide}}}}\n<div id="answer"></div>\n'
+        f"{{{{^{STROKE_ORDER_FIELD}}}}}"
+        f'<div class="heading">{_WORD}</div>'
+        f"{{{{/{STROKE_ORDER_FIELD}}}}}\n"
+        f"{_CONNECTION}",
     ),
 )
 
@@ -79,7 +226,59 @@ _CSS = """.card {
   margin-top: 0.1em;
 }
 
-/* The word when it follows the picture and audio, on the production back. */
+.mieru-drawing {
+  margin-top: 0.5em;
+}
+
+.mieru-surface {
+  position: relative;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.mieru-drawing canvas {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  /* An outline rather than a border, so the box pointers are mapped through is
+     exactly the drawing surface. */
+  outline: 1px solid rgba(128, 128, 128, 0.5);
+  border-radius: 8px;
+  touch-action: none;
+}
+
+.mieru-drawing button {
+  margin-top: 0.4em;
+  font-size: 16px;
+}
+
+.mieru-guide {
+  display: none;
+  position: absolute;
+  inset: 0;
+  justify-content: center;
+  align-items: center;
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.mieru-answer .mieru-guide {
+  display: flex;
+}
+
+.mieru-guide img {
+  flex: 0 1 auto;
+  min-width: 0;
+  height: 100%;
+  object-fit: contain;
+  /* KanjiVG draws in black, like the pencil; this turns it red (#e5494d), which
+     stands out from the pencil in light and night mode alike. */
+  filter: brightness(0) invert(49%) sepia(82%) saturate(5914%) hue-rotate(338deg)
+    brightness(101%) contrast(79%);
+}
+
+/* The word when it follows the picture and audio, on the production and writing backs. */
 .audio ~ .heading {
   margin-top: 0.4em;
 }

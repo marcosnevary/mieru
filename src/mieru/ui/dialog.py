@@ -37,7 +37,7 @@ from aqt.utils import (
     tooltip,
 )
 
-from ..core import audio, dictionary, images
+from ..core import audio, dictionary, images, stroke_order
 from ..core.dictionary import Candidate, split_queries
 from ..core.furigana import to_anki_furigana
 from ..core.images import SOURCES, ImageResult, InvalidApiKeyError, Source
@@ -46,6 +46,7 @@ from .note_type import (
     ENGLISH_FIELD,
     IMAGE_FIELD,
     PERSONAL_CONNECTION_FIELD,
+    STROKE_ORDER_FIELD,
     WORD_FIELD,
     ensure_note_type,
 )
@@ -455,7 +456,11 @@ class MieruDialog(QDialog):
         audio_data = word.audio.get(candidate)
         deck_id = self._deck_chooser.selected_deck_id
 
-        def save_note(image_data: bytes) -> None:
+        def download() -> tuple[bytes, list[tuple[str, bytes]]]:
+            return images.download(image.image_url), stroke_order.fetch_stroke_order(candidate.word)
+
+        def save_note(downloaded: tuple[bytes, list[tuple[str, bytes]]]) -> None:
+            image_data, diagrams = downloaded
             media = self.mw.col.media
             image_name = media.write_data(
                 f"mieru_{candidate.word}{_extension(image.image_url)}", image_data
@@ -464,15 +469,23 @@ class MieruDialog(QDialog):
             if audio_data is not None:
                 audio_name = media.write_data(f"mieru_{candidate.word}.mp3", audio_data)
                 note[AUDIO_FIELD] = f"[sound:{audio_name}]"
+            # Named by character, so words sharing a character share its file.
+            diagram_names = [
+                media.write_data(f"mieru_stroke_order_{character}.svg", svg)
+                for character, svg in diagrams
+            ]
+            note[STROKE_ORDER_FIELD] = "".join(
+                f'<img src="{html.escape(name)}">' for name in diagram_names
+            )
             add_note(parent=self, note=note, target_deck_id=deck_id).success(
                 lambda _: self._on_added(word, candidate)
             ).run_in_background()
 
         QueryOp(
             parent=self,
-            op=lambda _col: images.download(image.image_url),
+            op=lambda _col: download(),
             success=save_note,
-        ).without_collection().with_progress("Downloading picture…").failure(
+        ).without_collection().with_progress("Downloading picture and stroke order…").failure(
             self._show_network_error
         ).run_in_background()
 
