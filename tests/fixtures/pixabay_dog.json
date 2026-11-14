@@ -1,0 +1,36 @@
+{
+  "total": 2,
+  "totalHits": 2,
+  "hits": [
+    {
+      "id": 1123016,
+      "pageURL": "https://pixabay.com/photos/dog-pet-animal-1123016/",
+      "type": "photo",
+      "tags": "dog, pet, animal",
+      "previewURL": "https://cdn.pixabay.com/photo/2016/01/05/17/51/dog-1123016_150.jpg",
+      "previewWidth": 150,
+      "previewHeight": 100,
+      "webformatURL": "https://pixabay.com/get/g1a2b3c_640.jpg",
+      "webformatWidth": 640,
+      "webformatHeight": 427,
+      "largeImageURL": "https://pixabay.com/get/g1a2b3c_1280.jpg",
+      "imageWidth": 5184,
+      "imageHeight": 3456
+    },
+    {
+      "id": 2083492,
+      "pageURL": "https://pixabay.com/illustrations/dog-cartoon-2083492/",
+      "type": "illustration",
+      "tags": "dog, cartoon",
+      "previewURL": "https://cdn.pixabay.com/photo/2017/02/20/18/03/dog-2083492_150.png",
+      "previewWidth": 150,
+      "previewHeight": 150,
+      "webformatURL": "https://pixabay.com/get/g4d5e6f_640.png",
+      "webformatWidth": 640,
+      "webformatHeight": 640,
+      "largeImageURL": "https://pixabay.com/get/g4d5e6f_1280.png",
+      "imageWidth": 1920,
+      "imageHeight": 1920
+    }
+  ]
+}
