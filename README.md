@@ -7,7 +7,7 @@ Anki add-on that turns an English word into a Japanese flashcard: the front show
 1. Install the add-on (see below) and restart Anki.
 2. Get a free Pixabay API key: create an account at [pixabay.com](https://pixabay.com/accounts/register/), then open [pixabay.com/api/docs](https://pixabay.com/api/docs/) while logged in.
 3. In Anki, open **Tools › Add-ons**, select mieru, click **Config** and paste the key into `pixabay_api_key`.
-4. Open **Tools › mieru…** (Ctrl+Shift+M), choose the deck, type an English word, pick the Japanese word and a picture and click **Add**. If no picture fits, type a more concrete term in the picture search field (handshake for nice to meet you) and search again.
+4. Open **Tools › mieru…** (or press W on the main window), choose the deck, type an English word, pick the Japanese word and a picture and click **Add**. If no picture fits, type a more concrete term in the picture search field (handshake for nice to meet you) and search again.
 
 ## Development
 

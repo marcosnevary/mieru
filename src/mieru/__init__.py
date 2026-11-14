@@ -24,7 +24,7 @@ def _open_dialog() -> None:
 def _add_menu_action() -> None:
     assert mw is not None
     action = QAction("mieru…", mw)
-    action.setShortcut(QKeySequence("Ctrl+Shift+M"))
+    action.setShortcut(QKeySequence("W"))
     action.triggered.connect(_open_dialog)
     mw.form.menuTools.addAction(action)
 

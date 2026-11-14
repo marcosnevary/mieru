@@ -6,7 +6,7 @@ mieru is an Anki add-on. The user types an English word, picks one of the Japane
 
 | Path | Role |
 | --- | --- |
-| `src/mieru/__init__.py` | Entry point Anki imports. Adds **Tools › mieru…** (Ctrl+Shift+M) once the main window exists. |
+| `src/mieru/__init__.py` | Entry point Anki imports. Adds **Tools › mieru…** (W) once the main window exists. |
 | `src/mieru/core/` | Pure Python, no `aqt` imports: dictionary, furigana, audio, picture sources, HTTP. Tested with pytest. |
 | `src/mieru/ui/` | Everything that touches Anki's Qt UI or the collection: the dialog and the note type. |
 | `scripts/build.py` | Zips `src/mieru` into `mieru.ankiaddon`. |
@@ -50,5 +50,6 @@ Picture sources are listed in `core/images.py` `SOURCES`; each needs the user's 
 - **Pixabay for pictures.** Royalty-free and good for illustrating nouns; the cost is that each user needs a free key. It is weak on people and situations (greetings, actions); the picture search term covers most of that. Pexels was tried as a second source but stopped issuing API keys (November 2026). Openverse needs no key but returns less illustrative results and was slow and timing out when re-evaluated; Irasutoya has no API.
 - **Picture search term separate from the dictionary word.** The English word is often a poor image query for abstract vocabulary; refining it shouldn't discard the chosen Japanese candidate.
 - **Back shows only the picture.** The picture is the answer; the English word is stored but hidden so it can't be read instead of recalling the meaning.
+- **W opens the window.** A single key like Anki's own A (Add) and B (Browse), reachable with the left hand alone. M was rejected because the reviewer already uses it for its More menu, and two shortcuts on one key make Qt fire neither.
 - **`requests` over `urllib`.** Anki already bundles it, so it adds nothing to the package.
 - **PyQt6 pinned to Anki's bundled version in dev.** Type stubs then match what runs, and PyQt6 6.12's stubs don't parse under mypy.
