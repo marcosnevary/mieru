@@ -1,1 +1,32 @@
 """mieru: turn an English word into a Japanese Anki card with furigana, audio and a picture."""
+
+from __future__ import annotations
+
+from aqt import gui_hooks, mw
+from aqt.qt import QAction, QKeySequence
+
+_dialog = None
+
+
+def _open_dialog() -> None:
+    # Imported lazily so loading the add-on stays cheap at Anki startup.
+    from .ui.dialog import MieruDialog
+
+    global _dialog
+    assert mw is not None
+    if _dialog is None:
+        _dialog = MieruDialog(mw)
+    _dialog.show()
+    _dialog.raise_()
+    _dialog.activateWindow()
+
+
+def _add_menu_action() -> None:
+    assert mw is not None
+    action = QAction("mieru…", mw)
+    action.setShortcut(QKeySequence("Ctrl+Shift+M"))
+    action.triggered.connect(_open_dialog)
+    mw.form.menuTools.addAction(action)
+
+
+gui_hooks.main_window_did_init.append(_add_menu_action)
