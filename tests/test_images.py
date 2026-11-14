@@ -3,7 +3,7 @@ import requests
 from conftest import load_fixture
 
 from mieru.core import http, images
-from mieru.core.images import ImageResult, InvalidApiKeyError, parse_pexels, parse_pixabay
+from mieru.core.images import ImageResult, InvalidApiKeyError, parse_pixabay
 
 
 def test_uses_preview_for_thumbnails_and_web_format_for_the_card() -> None:
@@ -17,26 +17,17 @@ def test_uses_preview_for_thumbnails_and_web_format_for_the_card() -> None:
     assert len(results) == 2
 
 
-def test_uses_small_pexels_photo_for_thumbnails_and_large_for_the_card() -> None:
-    results = parse_pexels(load_fixture("pexels_handshake.json"))
-
-    photo = "https://images.pexels.com/photos/3184291/pexels-photo-3184291.jpeg"
-    assert results[0] == ImageResult(
-        preview_url=f"{photo}?auto=compress&cs=tinysrgb&h=130",
-        image_url=f"{photo}?auto=compress&cs=tinysrgb&h=650&w=940",
-        credit="Photo by fauxels on Pexels",
-    )
-    assert len(results) == 2
-
-
-def test_reports_a_rejected_pexels_key(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_reports_a_rejected_pixabay_key(monkeypatch: pytest.MonkeyPatch) -> None:
     def reject(*_args: object, **_kwargs: object) -> requests.Response:
         response = requests.Response()
-        response.status_code = 401
+        response.status_code = 400
+        response._content = (
+            b"[ERROR 400] Invalid or missing API key (https://pixabay.com/api/docs/)."
+        )
         raise requests.HTTPError(response=response)
 
     monkeypatch.setattr(http, "get", reject)
 
     with pytest.raises(InvalidApiKeyError) as raised:
-        images.search_pexels("handshake", "bad-key")
-    assert raised.value.source == "Pexels"
+        images.search_pixabay("dog", "bad-key")
+    assert raised.value.source == "Pixabay"

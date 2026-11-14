@@ -1,4 +1,4 @@
-"""Picture search on Pixabay and Pexels."""
+"""Picture search on Pixabay."""
 
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ import requests
 from . import http
 
 _PIXABAY_URL = "https://pixabay.com/api/"
-_PEXELS_URL = "https://api.pexels.com/v1/search"
 _RESULTS_PER_PAGE = 24
 
 
@@ -23,10 +22,9 @@ class InvalidApiKeyError(Exception):
 @dataclass(frozen=True)
 class ImageResult:
     preview_url: str
-    # Large enough for a card, small enough for the collection. Pixabay's URL
-    # expires after 24 hours, so every source's picture is downloaded on add.
+    # Pixabay's 640px rendition: large enough for a card, small enough for the
+    # collection. Its URL expires after 24 hours, so it is downloaded on add.
     image_url: str
-    # Pexels asks apps to credit the photographer; shown on hover.
     credit: str
 
 
@@ -59,28 +57,6 @@ def parse_pixabay(payload: dict[str, Any]) -> list[ImageResult]:
     ]
 
 
-def search_pexels(query: str, api_key: str) -> list[ImageResult]:
-    params = {"query": query, "per_page": _RESULTS_PER_PAGE}
-    try:
-        response = http.get(_PEXELS_URL, params, headers={"Authorization": api_key})
-    except requests.HTTPError as error:
-        if error.response is not None and error.response.status_code == 401:
-            raise InvalidApiKeyError("Pexels") from error
-        raise
-    return parse_pexels(response.json())
-
-
-def parse_pexels(payload: dict[str, Any]) -> list[ImageResult]:
-    return [
-        ImageResult(
-            preview_url=photo["src"]["small"],
-            image_url=photo["src"]["large"],
-            credit=f"Photo by {photo['photographer']} on Pexels",
-        )
-        for photo in payload["photos"]
-    ]
-
-
 @dataclass(frozen=True)
 class Source:
     name: str
@@ -89,10 +65,7 @@ class Source:
     search: Callable[[str, str], list[ImageResult]]
 
 
-SOURCES = (
-    Source("Pixabay", "https://pixabay.com/", "pixabay_api_key", search_pixabay),
-    Source("Pexels", "https://www.pexels.com/", "pexels_api_key", search_pexels),
-)
+SOURCES = (Source("Pixabay", "https://pixabay.com/", "pixabay_api_key", search_pixabay),)
 
 
 def download(url: str) -> bytes:

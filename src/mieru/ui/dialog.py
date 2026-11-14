@@ -57,10 +57,9 @@ _THUMBNAIL_SIZE = QSize(150, 150)
 _THUMBNAIL_DOWNLOADS = 8
 _MEANINGS_SHOWN = 3
 _MISSING_KEY_MESSAGE = (
-    "To choose pictures, add a free Pixabay or Pexels API key in "
-    "Tools › Add-ons › mieru › Config (get one at "
-    '<a href="https://pixabay.com/api/docs/">pixabay.com/api/docs</a> or '
-    '<a href="https://www.pexels.com/api/">pexels.com/api</a>).'
+    "To choose pictures, add a free Pixabay API key in "
+    'Tools › Add-ons › mieru › Config (get one at <a href="https://pixabay.com/api/docs/">'
+    "pixabay.com/api/docs</a>)."
 )
 
 
@@ -354,7 +353,7 @@ class MieruDialog(QDialog):
 def _images_label(sources: list[tuple[Source, str]]) -> str:
     if not sources:
         return _MISSING_KEY_MESSAGE
-    # The Pixabay and Pexels API terms require showing where results come from.
+    # Pixabay's API terms require showing where search results come from.
     links = " and ".join(f'<a href="{source.url}">{source.name}</a>' for source, _key in sources)
     return f"Picture — from {links}"
 
