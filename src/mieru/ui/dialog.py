@@ -53,6 +53,7 @@ from .note_type import (
 )
 
 _GEOMETRY_KEY = "mieru"
+_DEFAULT_WIDTH = 760
 _THUMBNAIL_SIZE = QSize(150, 150)
 _THUMBNAIL_DOWNLOADS = 8
 _MEANINGS_SHOWN = 3
@@ -77,12 +78,16 @@ class MieruDialog(QDialog):
         self._image_query = ""
         self._images: list[ImageResult] = []
         self._setup_ui()
-        restoreGeom(self, _GEOMETRY_KEY)
+        restoreGeom(self, _GEOMETRY_KEY, default_size=(_DEFAULT_WIDTH, self.sizeHint().height()))
 
     def _setup_ui(self) -> None:
-        self.setWindowTitle("mieru — new Japanese card")
+        self.setWindowTitle("mieru")
         disable_help_button(self)
         layout = QVBoxLayout(self)
+
+        deck_row = QWidget()
+        self._deck_chooser = DeckChooser(self.mw, deck_row)
+        layout.addWidget(deck_row)
 
         search_row = QHBoxLayout()
         self._query_input = QLineEdit()
@@ -94,18 +99,15 @@ class MieruDialog(QDialog):
         search_row.addWidget(search_button)
         layout.addLayout(search_row)
 
-        layout.addWidget(QLabel("Japanese word"))
+        word_row = QHBoxLayout()
+        self._play_button = QPushButton("▶ Play")
+        self._play_button.clicked.connect(self._play_audio)
+        word_row.addWidget(QLabel("Japanese word"), stretch=1)
+        word_row.addWidget(self._play_button)
+        layout.addLayout(word_row)
         self._candidate_list = QListWidget()
         self._candidate_list.currentRowChanged.connect(self._on_candidate_changed)
         layout.addWidget(self._candidate_list, stretch=1)
-
-        audio_row = QHBoxLayout()
-        self._audio_status = QLabel()
-        self._play_button = QPushButton("▶ Play")
-        self._play_button.clicked.connect(self._play_audio)
-        audio_row.addWidget(self._audio_status, stretch=1)
-        audio_row.addWidget(self._play_button)
-        layout.addLayout(audio_row)
 
         self._images_label = QLabel()
         self._images_label.setOpenExternalLinks(True)
@@ -115,7 +117,7 @@ class MieruDialog(QDialog):
         self._image_query_input = QLineEdit()
         self._image_query_input.setPlaceholderText("Picture search term")
         self._image_query_input.returnPressed.connect(self._search_images)
-        image_search_button = QPushButton("Search pictures")
+        image_search_button = QPushButton("Search")
         image_search_button.clicked.connect(self._search_images)
         image_search_row.addWidget(self._image_query_input)
         image_search_row.addWidget(image_search_button)
@@ -128,10 +130,6 @@ class MieruDialog(QDialog):
         self._image_list.setSpacing(6)
         self._image_list.currentRowChanged.connect(lambda _row: self._update_add_button())
         layout.addWidget(self._image_list, stretch=3)
-
-        deck_row = QWidget()
-        self._deck_chooser = DeckChooser(self.mw, deck_row)
-        layout.addWidget(deck_row)
 
         buttons = QDialogButtonBox()
         add_button = buttons.addButton("Add", QDialogButtonBox.ButtonRole.AcceptRole)
@@ -150,7 +148,6 @@ class MieruDialog(QDialog):
         self._candidate = None
         self._audio = None
         self._candidate_list.clear()
-        self._audio_status.setText("")
         self._play_button.setEnabled(False)
         self._image_query_input.clear()
         self._clear_images()
@@ -255,9 +252,7 @@ class MieruDialog(QDialog):
         self._update_add_button()
         candidate = self._candidate
         if candidate is None:
-            self._audio_status.setText("")
             return
-        self._audio_status.setText("Audio: loading…")
         QueryOp(
             parent=self,
             op=lambda _col: audio.fetch_audio(candidate.word, candidate.reading),
@@ -269,7 +264,6 @@ class MieruDialog(QDialog):
             return
         self._audio = found
         self._play_button.setEnabled(found is not None)
-        self._audio_status.setText("Audio: ready" if found else "Audio: not found")
         if found:
             self._play_audio()
 
@@ -355,7 +349,7 @@ def _images_label(sources: list[tuple[Source, str]]) -> str:
         return _MISSING_KEY_MESSAGE
     # Pixabay's API terms require showing where search results come from.
     links = " and ".join(f'<a href="{source.url}">{source.name}</a>' for source, _key in sources)
-    return f"Picture — from {links}"
+    return f"Picture (from {links})"
 
 
 def _search_with_thumbnails(
