@@ -1,6 +1,11 @@
+from __future__ import annotations
+
+import pytest
+import requests
 from conftest import load_fixture
 
-from mieru.core.dictionary import parse_jisho, split_queries
+from mieru.core import http
+from mieru.core.dictionary import parse_jisho, search, split_queries
 
 
 def test_lists_common_words_before_phrases_containing_the_query() -> None:
@@ -47,3 +52,25 @@ def test_keeps_a_single_word_as_is() -> None:
 
 def test_drops_empty_and_repeated_words() -> None:
     assert split_queries("dog,, cat,\n\ndog, ") == ["dog", "cat"]
+
+
+def test_spaces_lookups_to_stay_under_the_jisho_rate_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    intervals: list[float] = []
+
+    def fake_get(
+        _url: str, _params: object = None, *, min_interval: float = 0.0
+    ) -> requests.Response:
+        intervals.append(min_interval)
+        response = requests.Response()
+        response.status_code = 200
+        response._content = b'{"meta": {"status": 200}, "data": []}'
+        return response
+
+    monkeypatch.setattr(http, "get", fake_get)
+
+    search("dog")
+    search("cat")
+
+    assert intervals and all(interval > 0 for interval in intervals)

@@ -74,6 +74,7 @@ class _Word:
     image_query: str
     # None while the dictionary lookup runs.
     candidates: list[Candidate] | None = None
+    lookup_failed: bool = False
     candidate_row: int = 0
     audio: dict[Candidate, bytes | None] = field(default_factory=dict)
     audio_requested: set[Candidate] = field(default_factory=set)
@@ -230,6 +231,7 @@ class MieruDialog(QDialog):
 
     def _look_up(self, word: _Word) -> None:
         def on_failure(error: Exception) -> None:
+            word.lookup_failed = True
             self._on_candidates(word, [])
             self._show_network_error(error)
 
@@ -516,7 +518,7 @@ class MieruDialog(QDialog):
             return
         self._warning_open = True
         try:
-            showWarning(f"Could not reach the server: {error}", parent=self)
+            showWarning(_network_error_message(error), parent=self)
         finally:
             self._warning_open = False
 
@@ -542,9 +544,19 @@ def _word_label(word: _Word | None) -> str:
         return label
     if word.candidates is None:
         return f"{label} · looking up…"
+    query = html.escape(word.query)
+    if word.lookup_failed:
+        return f"{label} · could not look up “{query}”"
     if not word.candidates:
-        return f"{label} · none found for “{html.escape(word.query)}”"
+        return f"{label} · none found for “{query}”"
     return label
+
+
+def _network_error_message(error: requests.RequestException) -> str:
+    response = error.response if isinstance(error, requests.HTTPError) else None
+    if response is not None and response.status_code == 429:
+        return "The server is limiting requests right now. Wait a minute and search again."
+    return f"Could not reach the server: {error}"
 
 
 def _images_label(sources: list[tuple[Source, str]]) -> str:

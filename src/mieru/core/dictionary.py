@@ -9,6 +9,9 @@ from typing import Any
 from . import http
 
 _JISHO_SEARCH_URL = "https://jisho.org/api/v1/search/words"
+# Jisho answers 429 above 10 requests per 10 seconds; a word list asks for every
+# word at once, so the requests are spaced out instead of fired together.
+_JISHO_REQUEST_INTERVAL_SECONDS = 1.1
 
 
 @dataclass(frozen=True)
@@ -25,7 +28,12 @@ def split_queries(text: str) -> list[str]:
 
 
 def search(english: str) -> list[Candidate]:
-    return parse_jisho(http.get(_JISHO_SEARCH_URL, {"keyword": english}).json())
+    response = http.get(
+        _JISHO_SEARCH_URL,
+        {"keyword": english},
+        min_interval=_JISHO_REQUEST_INTERVAL_SECONDS,
+    )
+    return parse_jisho(response.json())
 
 
 def parse_jisho(payload: dict[str, Any]) -> list[Candidate]:
