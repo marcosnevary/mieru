@@ -5,23 +5,27 @@ from __future__ import annotations
 import html
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from pathlib import PurePosixPath
+from enum import Enum
+from pathlib import Path, PurePosixPath
 from urllib.parse import urlparse
 
 import requests
+from anki.collection import SearchNode
 from anki.errors import AbortSchemaModification
-from anki.notes import NoteFieldsCheckResult
+from anki.notes import Note
 from anki.utils import tmpfile
 from aqt.deckchooser import DeckChooser
 from aqt.main import AnkiQt
 from aqt.operations import QueryOp
-from aqt.operations.note import add_note
+from aqt.operations.note import add_note, update_note
 from aqt.qt import (
     QDialog,
     QDialogButtonBox,
+    QFileDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPixmap,
     QPushButton,
     QVBoxLayout,
@@ -29,7 +33,6 @@ from aqt.qt import (
 )
 from aqt.sound import av_player
 from aqt.utils import (
-    askUser,
     disable_help_button,
     restoreGeom,
     saveGeom,
@@ -44,7 +47,9 @@ from ..core.images import SOURCES, ImageResult, InvalidApiKeyError, Source
 from .note_type import (
     AUDIO_FIELD,
     ENGLISH_FIELD,
+    FIELDS,
     IMAGE_FIELD,
+    NOTE_TYPE_NAME,
     PERSONAL_CONNECTION_FIELD,
     STROKE_ORDER_FIELD,
     WORD_FIELD,
@@ -58,11 +63,35 @@ _ROW_SPACING = 6
 _SECTION_SPACING = 16
 _TEXT_MARGIN = 4
 _THUMBNAIL_DOWNLOADS = 8
+_IMPORT_FILTER = "Pictures (*.jpg *.jpeg *.png *.gif *.webp)"
 _MISSING_KEY_MESSAGE = (
     "To choose pictures, add a free Pixabay API key in "
     'Tools › Add-ons › mieru › Config (get one at <a href="https://pixabay.com/api/docs/">'
     "pixabay.com/api/docs</a>)."
 )
+
+
+@dataclass(eq=False)
+class _Picture:
+    """A picture of a word: a search result downloaded when the note is added, or a
+    file the user imported."""
+
+    thumbnail: QPixmap
+    credit: str
+    # Including the dot, as in ".jpg".
+    suffix: str
+    image_url: str | None = None
+    data: bytes | None = None
+
+    @property
+    def imported(self) -> bool:
+        return self.data is not None
+
+
+class _Duplicate(Enum):
+    REPLACE = "replace"
+    ADD = "add"
+    CANCEL = "cancel"
 
 
 @dataclass(eq=False)
@@ -78,8 +107,8 @@ class _Word:
     candidate_row: int = 0
     audio: dict[Candidate, bytes | None] = field(default_factory=dict)
     audio_requested: set[Candidate] = field(default_factory=set)
-    pictures: list[tuple[ImageResult, QPixmap]] = field(default_factory=list)
-    picture_row: int = -1
+    pictures: list[_Picture] = field(default_factory=list)
+    selected_pictures: set[_Picture] = field(default_factory=set)
     personal_connection: str = ""
     added: bool = False
 
@@ -93,7 +122,7 @@ class _Word:
     def is_ready(self) -> bool:
         return (
             self.candidate is not None
-            and self.picture_row >= 0
+            and bool(self.selected_pictures)
             and bool(self.personal_connection.strip())
         )
 
@@ -172,11 +201,14 @@ class MieruDialog(QDialog):
         self._image_query_input.returnPressed.connect(self._refine_images)
         image_search_button = QPushButton("Search")
         image_search_button.clicked.connect(self._refine_images)
+        self._import_button = QPushButton("Import…")
+        self._import_button.clicked.connect(self._import_pictures)
         image_search_row.addWidget(self._image_query_input)
         image_search_row.addWidget(image_search_button)
+        image_search_row.addWidget(self._import_button)
         layout.addLayout(image_search_row)
         self._image_list = PictureGrid()
-        self._image_list.currentRowChanged.connect(self._on_picture_changed)
+        self._image_list.itemSelectionChanged.connect(self._on_picture_selection_changed)
         layout.addWidget(self._image_list, stretch=3)
         layout.addSpacing(_SECTION_SPACING)
 
@@ -254,10 +286,36 @@ class MieruDialog(QDialog):
         if word is None or not image_query:
             return
         word.image_query = image_query
-        word.pictures = []
-        word.picture_row = -1
+        # Imported pictures are the user's own choice, so a new search keeps them.
+        word.pictures = [picture for picture in word.pictures if picture.imported]
+        word.selected_pictures.intersection_update(word.pictures)
         self._search_images(word)
         self._show_pictures()
+
+    def _import_pictures(self) -> None:
+        word = self._word
+        if word is None:
+            return
+        paths, _filter = QFileDialog.getOpenFileNames(self, "Import pictures", "", _IMPORT_FILTER)
+        unreadable = []
+        for path in paths:
+            file = Path(path)
+            data = file.read_bytes()
+            thumbnail = QPixmap()
+            if not thumbnail.loadFromData(data):
+                unreadable.append(file.name)
+                continue
+            picture = _Picture(
+                thumbnail=thumbnail,
+                credit=f"{file.name} (imported)",
+                suffix=file.suffix.lower(),
+                data=data,
+            )
+            word.pictures.append(picture)
+            word.selected_pictures.add(picture)
+        self._show_pictures()
+        if unreadable:
+            showWarning(f"Could not read as pictures: {', '.join(unreadable)}", parent=self)
 
     def _search_images(self, word: _Word) -> None:
         for source, api_key in self._configured_sources():
@@ -287,7 +345,14 @@ class MieruDialog(QDialog):
             pixmap = QPixmap()
             if thumbnail is not None:
                 pixmap.loadFromData(thumbnail)
-            word.pictures.append((result, pixmap))
+            word.pictures.append(
+                _Picture(
+                    thumbnail=pixmap,
+                    credit=result.credit,
+                    suffix=_extension(result.image_url),
+                    image_url=result.image_url,
+                )
+            )
             if is_current:
                 self._image_list.add_picture(pixmap, result.credit)
 
@@ -320,6 +385,7 @@ class MieruDialog(QDialog):
         word = self._word
         self._show_list()
         self._image_query_input.setText(word.image_query if word else "")
+        self._import_button.setEnabled(word is not None)
         self._connection_input.setText(word.personal_connection if word else "")
         self._show_candidates()
         self._show_pictures()
@@ -351,9 +417,15 @@ class MieruDialog(QDialog):
         self._image_list.blockSignals(True)
         self._image_list.clear()
         if word is not None:
-            for result, pixmap in word.pictures:
-                self._image_list.add_picture(pixmap, result.credit)
-            self._image_list.setCurrentRow(word.picture_row)
+            for picture in word.pictures:
+                self._image_list.add_picture(picture.thumbnail, picture.credit)
+            self._image_list.select_rows(
+                [
+                    row
+                    for row, picture in enumerate(word.pictures)
+                    if picture in word.selected_pictures
+                ]
+            )
         self._image_list.blockSignals(False)
         self._update_add_button()
 
@@ -417,10 +489,12 @@ class MieruDialog(QDialog):
 
     # Adding the note.
 
-    def _on_picture_changed(self, row: int) -> None:
+    def _on_picture_selection_changed(self) -> None:
         word = self._word
         if word is not None:
-            word.picture_row = row
+            word.selected_pictures = {
+                word.pictures[row] for row in self._image_list.selected_rows()
+            }
         self._update_add_button()
 
     def _on_connection_edited(self, text: str) -> None:
@@ -447,52 +521,79 @@ class MieruDialog(QDialog):
         note[WORD_FIELD] = to_anki_furigana(candidate.word, candidate.reading)
         note[ENGLISH_FIELD] = word.query
         note[PERSONAL_CONNECTION_FIELD] = html.escape(word.personal_connection.strip())
-        if note.fields_check() == NoteFieldsCheckResult.DUPLICATE and not askUser(
-            f"You already have a mieru card for {candidate.word}. Add it anyway?",
-            parent=self,
-            defaultno=True,
-        ):
-            return
+        target = note
+        replacing = False
+        existing = self._find_duplicate(note)
+        if existing is not None:
+            choice = _ask_duplicate(self, candidate.word)
+            if choice is _Duplicate.CANCEL:
+                return
+            if choice is _Duplicate.REPLACE:
+                for name in FIELDS:
+                    existing[name] = note[name]
+                target = existing
+                replacing = True
 
-        image = word.pictures[word.picture_row][0]
+        pictures = [picture for picture in word.pictures if picture in word.selected_pictures]
         audio_data = word.audio.get(candidate)
         deck_id = self._deck_chooser.selected_deck_id
 
-        def download() -> tuple[bytes, list[tuple[str, bytes]]]:
-            return images.download(image.image_url), stroke_order.fetch_stroke_order(candidate.word)
-
-        def save_note(downloaded: tuple[bytes, list[tuple[str, bytes]]]) -> None:
-            image_data, diagrams = downloaded
-            media = self.mw.col.media
-            image_name = media.write_data(
-                f"mieru_{candidate.word}{_extension(image.image_url)}", image_data
+        def download() -> tuple[list[bytes], list[tuple[str, bytes]]]:
+            return (
+                [_picture_bytes(picture) for picture in pictures],
+                stroke_order.fetch_stroke_order(candidate.word),
             )
-            note[IMAGE_FIELD] = f'<img src="{html.escape(image_name)}">'
+
+        def save_note(downloaded: tuple[list[bytes], list[tuple[str, bytes]]]) -> None:
+            picture_data, diagrams = downloaded
+            media = self.mw.col.media
+            image_names = [
+                media.write_data(f"mieru_{candidate.word}_{number}{picture.suffix}", data)
+                for number, (picture, data) in enumerate(zip(pictures, picture_data), start=1)
+            ]
+            target[IMAGE_FIELD] = "".join(
+                f'<img src="{html.escape(name)}">' for name in image_names
+            )
+            target[AUDIO_FIELD] = ""
             if audio_data is not None:
                 audio_name = media.write_data(f"mieru_{candidate.word}.mp3", audio_data)
-                note[AUDIO_FIELD] = f"[sound:{audio_name}]"
+                target[AUDIO_FIELD] = f"[sound:{audio_name}]"
             # Named by character, so words sharing a character share its file.
             diagram_names = [
                 media.write_data(f"mieru_stroke_order_{character}.svg", svg)
                 for character, svg in diagrams
             ]
-            note[STROKE_ORDER_FIELD] = "".join(
+            target[STROKE_ORDER_FIELD] = "".join(
                 f'<img src="{html.escape(name)}">' for name in diagram_names
             )
-            add_note(parent=self, note=note, target_deck_id=deck_id).success(
-                lambda _: self._on_added(word, candidate)
+            if replacing:
+                operation = update_note(parent=self, note=target)
+            else:
+                operation = add_note(parent=self, note=target, target_deck_id=deck_id)
+            operation.success(
+                lambda _: self._on_added(word, candidate, replacing)
             ).run_in_background()
 
         QueryOp(
             parent=self,
             op=lambda _col: download(),
             success=save_note,
-        ).without_collection().with_progress("Downloading picture and stroke order…").failure(
+        ).without_collection().with_progress("Downloading pictures and stroke order…").failure(
             self._show_network_error
         ).run_in_background()
 
-    def _on_added(self, word: _Word, candidate: Candidate) -> None:
-        tooltip(f"Added {candidate.word}", parent=self.mw)
+    def _find_duplicate(self, note: Note) -> Note | None:
+        col = self.mw.col
+        search = col.build_search_string(
+            SearchNode(note=NOTE_TYPE_NAME),
+            SearchNode(field=SearchNode.Field(field_name=WORD_FIELD, text=note[WORD_FIELD])),
+        )
+        note_ids = col.find_notes(search)
+        # The oldest one: its card history is the longest.
+        return col.get_note(min(note_ids)) if note_ids else None
+
+    def _on_added(self, word: _Word, candidate: Candidate, replaced: bool) -> None:
+        tooltip(f"{'Replaced' if replaced else 'Added'} {candidate.word}", parent=self.mw)
         word.added = True
         if word is not self._word:
             # The user moved to another word while the picture downloaded.
@@ -585,3 +686,27 @@ def _try_download(url: str) -> bytes | None:
 
 def _extension(url: str) -> str:
     return PurePosixPath(urlparse(url).path).suffix or ".jpg"
+
+
+def _picture_bytes(picture: _Picture) -> bytes:
+    if picture.data is not None:
+        return picture.data
+    assert picture.image_url is not None
+    return images.download(picture.image_url)
+
+
+def _ask_duplicate(parent: QWidget, word: str) -> _Duplicate:
+    box = QMessageBox(parent)
+    box.setWindowTitle("mieru")
+    box.setText(f"You already have a mieru card for {word}.")
+    replace = box.addButton("Replace", QMessageBox.ButtonRole.AcceptRole)
+    add = box.addButton("Add anyway", QMessageBox.ButtonRole.DestructiveRole)
+    cancel = box.addButton(QMessageBox.StandardButton.Cancel)
+    box.setDefaultButton(cancel)
+    box.exec()
+    clicked = box.clickedButton()
+    if clicked is replace:
+        return _Duplicate.REPLACE
+    if clicked is add:
+        return _Duplicate.ADD
+    return _Duplicate.CANCEL

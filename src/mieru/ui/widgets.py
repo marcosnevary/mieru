@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from aqt.qt import (
+    QAbstractItemView,
     QColor,
     QEvent,
     QFont,
@@ -141,7 +142,7 @@ def _scaled(font: QFont, scale: float) -> QFont:
 
 class PictureGrid(QListWidget):
     """Thumbnails in equal columns that span the whole width, so the grid stays
-    centered instead of leaving a gap on the right."""
+    centered instead of leaving a gap on the right. Several can be selected."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -152,12 +153,23 @@ class PictureGrid(QListWidget):
         self.setMovement(QListView.Movement.Static)
         self.setUniformItemSizes(True)
         self.setSpacing(0)
+        self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
 
     def add_picture(self, thumbnail: QPixmap, tooltip: str) -> None:
         item = QListWidgetItem()
         item.setData(Qt.ItemDataRole.DecorationRole, thumbnail)
         item.setToolTip(tooltip)
         self.addItem(item)
+
+    def selected_rows(self) -> list[int]:
+        return sorted(index.row() for index in self.selectedIndexes())
+
+    def select_rows(self, rows: list[int]) -> None:
+        self.clearSelection()
+        for row in rows:
+            item = self.item(row)
+            if item is not None:
+                item.setSelected(True)
 
     def viewportEvent(self, event: QEvent | None) -> bool:
         # The viewport also narrows when the scroll bar appears, which the

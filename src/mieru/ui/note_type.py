@@ -226,14 +226,22 @@ _CSS = """.card {
 }
 
 .picture {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.3em;
   margin-top: 0.5em;
 }
 
 .picture img {
   max-width: 100%;
   max-height: 60vh;
-  /* Drops the gap an inline image leaves below itself for text descenders. */
-  vertical-align: bottom;
+}
+
+/* Several pictures share the height, so the answer still fits on the screen. */
+.picture:has(img + img) img {
+  max-height: 30vh;
 }
 
 /* A flex row is as tall as the button, where an inline button would sit in a
