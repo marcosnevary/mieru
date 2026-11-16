@@ -187,9 +187,10 @@ _TEMPLATES = (
         "Writing",
         f'<div class="picture">{_PICTURE}</div>\n{_AUDIO_ROW}\n{_DIVIDER}\n{_DRAWING}',
         # The stroke order behind the drawing is the answer; the word stands in only
-        # for notes added before stroke order existed. The empty #answer is also how
-        # the drawing script knows it is on the back.
-        f'{{{{FrontSide}}}}\n<div id="answer"></div>\n'
+        # for notes added before stroke order existed. The empty #answer comes before
+        # {{FrontSide}}, where the drawing script runs: AnkiDroid runs it while the page
+        # is still parsing, so an element after the script doesn't exist yet.
+        f'<div id="answer"></div>\n{{{{FrontSide}}}}\n'
         f"{{{{^{STROKE_ORDER_FIELD}}}}}"
         f'<div class="heading">{_WORD}</div>'
         f"{{{{/{STROKE_ORDER_FIELD}}}}}\n"

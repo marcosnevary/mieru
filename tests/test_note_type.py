@@ -104,6 +104,7 @@ def test_writing_card_shows_picture_audio_and_drawing_area_and_answers_with_stro
     assert _RUBY_WORD not in question
     assert _RUBY_WORD not in answer
     assert "<canvas>" in answer
+    assert answer.index('<div id="answer"></div>') < answer.index('<div class="mieru-drawing">')
     assert "button.hidden = true" not in answer
     assert f'<div class="mieru-guide"><img src="{_STROKE_ORDER}"></div>' in answer
     assert _CONNECTION in answer
