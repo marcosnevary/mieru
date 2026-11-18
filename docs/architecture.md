@@ -8,7 +8,7 @@ mieru is an Anki add-on. The user types an English word, picks one of the Japane
 | --- | --- |
 | `src/mieru/__init__.py` | Entry point Anki imports. Adds **Tools › mieru…** (W) once the main window exists. |
 | `src/mieru/core/` | Pure Python, no `aqt` imports: dictionary, furigana, audio, picture sources, HTTP. Tested with pytest. |
-| `src/mieru/ui/` | Everything that touches Anki's Qt UI or the collection: the dialog and the note type. |
+| `src/mieru/ui/` | Everything that touches Anki's Qt UI or the collection: the dialog, the note type and the editor's Audio button. |
 | `scripts/build.py` | Zips `src/mieru` into `mieru.ankiaddon`. |
 
 Inside the add-on, modules import each other relatively (`from ..core import …`): an add-on installed from AnkiWeb lives in a folder named after its numeric ID, not `mieru`.
@@ -48,6 +48,10 @@ Fields, in order:
 - `Stroke Order`: one `<img>` per distinct character of the word, behind the drawing on the back of the writing card only. KanjiVG draws in black, like the pencil, so a CSS filter turns the diagrams red in both light and night mode; the files themselves stay unchanged. Empty for notes added before it existed, and the card then shows none.
 
 Fields added after the first release come last because Anki appends fields added to an existing note type, so new and older collections share the field order.
+
+## Editor audio button
+
+`ui/editor_audio.py` adds an **Audio** button to the toolbar of every note editor Anki shows: adding a card, editing the current card and the Browser. It is independent of the mieru window and works on any note type. It reads the selected text: it must be a Japanese word (kana, kanji, 々 or 〆), otherwise nothing happens. The reading comes from `dictionary.reading_of`, which uses the word itself for kana and only an exact Jisho entry for kanji, since another entry's reading would give the wrong pronunciation. The audio comes from `audio.fetch_audio`, as in the dialog, and is written to the media folder as `mieru_<word>.mp3`. The tag `[sound:…]` is copied to the clipboard for the user to paste right after the word, where Anki's editor shows its own play button. The button doesn't insert the tag itself: the field holding the word can't be located reliably from Python. The editor's note info is empty in the add window in Anki 26.09, and the editor's DOM didn't show the typed word to the inspector, so pasting is the path that always works.
 
 ## External sources
 

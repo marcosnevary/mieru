@@ -13,6 +13,7 @@ Anki users learning Japanese who want picture cards without assembling furigana,
 - Choose one or more pictures that represent the word; they carry the meaning, with no English on the cards. Pictures come from the search or from image files on disk. When the word itself makes a poor picture search (nice to meet you), search pictures for a more concrete term (handshake) without losing the chosen Japanese word.
 - Write a personal connection to the word (a memory, a place, a person); it is required, and it shows on the back of every card.
 - Type a list of words (dog, cat, bank) and go through them one by one, choosing the Japanese word and picture for each; every word is loaded up front, and you can move back and forth or skip any you don't want.
+- Outside the mieru window, in Anki's own editor (adding, editing and the Browser), select a Japanese word and press Audio to insert its pronunciation after it.
 
 ## Out of scope for now
 

@@ -5,6 +5,8 @@ from __future__ import annotations
 from aqt import gui_hooks, mw
 from aqt.qt import QAction, QKeySequence
 
+from .ui.editor_audio import add_editor_button
+
 _dialog = None
 
 
@@ -39,3 +41,4 @@ def _add_menu_action() -> None:
 
 gui_hooks.profile_did_open.append(_refresh_note_type)
 gui_hooks.main_window_did_init.append(_add_menu_action)
+gui_hooks.editor_did_init_buttons.append(add_editor_button)
