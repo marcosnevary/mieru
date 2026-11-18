@@ -7,11 +7,14 @@ from dataclasses import dataclass
 from typing import Any
 
 from . import http
+from .furigana import is_kana
 
 _JISHO_SEARCH_URL = "https://jisho.org/api/v1/search/words"
 # Jisho answers 429 above 10 requests per 10 seconds; a word list asks for every
 # word at once, so the requests are spaced out instead of fired together.
 _JISHO_REQUEST_INTERVAL_SECONDS = 1.1
+# Kana, kanji, the iteration marks 々 and 〆.
+_JAPANESE_TEXT = re.compile(r"[\u3005\u3006\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]+")
 
 
 @dataclass(frozen=True)
@@ -27,6 +30,10 @@ def split_queries(text: str) -> list[str]:
     return list(dict.fromkeys(query for query in queries if query))
 
 
+def is_japanese(text: str) -> bool:
+    return _JAPANESE_TEXT.fullmatch(text) is not None
+
+
 def search(english: str) -> list[Candidate]:
     response = http.get(
         _JISHO_SEARCH_URL,
@@ -34,6 +41,15 @@ def search(english: str) -> list[Candidate]:
         min_interval=_JISHO_REQUEST_INTERVAL_SECONDS,
     )
     return parse_jisho(response.json())
+
+
+def reading_of(word: str) -> str | None:
+    """The kana reading of a Japanese word, or None when Jisho doesn't list the word as written."""
+    if all(is_kana(char) for char in word):
+        return word
+    # Jisho also returns phrases containing the word, so only an exact match counts;
+    # another entry's reading would give the wrong pronunciation.
+    return next((c.reading for c in search(word) if c.word == word), None)
 
 
 def parse_jisho(payload: dict[str, Any]) -> list[Candidate]:

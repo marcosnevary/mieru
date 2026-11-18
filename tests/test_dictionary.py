@@ -4,8 +4,8 @@ import pytest
 import requests
 from conftest import load_fixture
 
-from mieru.core import http
-from mieru.core.dictionary import parse_jisho, search, split_queries
+from mieru.core import dictionary, http
+from mieru.core.dictionary import is_japanese, parse_jisho, reading_of, search, split_queries
 
 
 def test_lists_common_words_before_phrases_containing_the_query() -> None:
@@ -40,6 +40,43 @@ def test_skips_entries_without_a_reading() -> None:
     words = [c.word for c in parse_jisho(load_fixture("jisho_tomato.json"))]
 
     assert "トマト缶" not in words
+
+
+@pytest.mark.parametrize("text", ["犬", "いぬ", "トマト", "取り扱い", "時々", "食べる"])
+def test_accepts_japanese_words(text: str) -> None:
+    assert is_japanese(text)
+
+
+@pytest.mark.parametrize("text", ["", "dog", "犬 猫", "犬です。", " 犬"])
+def test_rejects_anything_that_is_not_a_japanese_word(text: str) -> None:
+    assert not is_japanese(text)
+
+
+def test_reads_a_kana_word_as_itself_without_a_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fail(_english: str) -> list[dictionary.Candidate]:
+        raise AssertionError("kana needs no dictionary lookup")
+
+    monkeypatch.setattr(dictionary, "search", fail)
+
+    assert reading_of("トマト") == "トマト"
+
+
+def test_reads_a_kanji_word_from_its_exact_dictionary_entry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    candidates = parse_jisho(load_fixture("jisho_dog.json"))
+    monkeypatch.setattr(dictionary, "search", lambda _word: candidates)
+
+    assert reading_of("犬") == "いぬ"
+
+
+def test_has_no_reading_for_a_word_the_dictionary_does_not_list(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    candidates = parse_jisho(load_fixture("jisho_dog.json"))
+    monkeypatch.setattr(dictionary, "search", lambda _word: candidates)
+
+    assert reading_of("食べた") is None
 
 
 def test_splits_a_word_list_on_commas_and_line_breaks() -> None:
