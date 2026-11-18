@@ -9,7 +9,7 @@ _KATAKANA = range(0x30A1, 0x30F7)
 _KATAKANA_TO_HIRAGANA_OFFSET = 0x60
 
 
-def _is_kana(char: str) -> bool:
+def is_kana(char: str) -> bool:
     return "\u3040" <= char <= "\u30ff"
 
 
@@ -25,14 +25,14 @@ def to_anki_furigana(word: str, reading: str) -> str:
 
     "食べる", "たべる" -> "食[た]べる"; "取り扱い", "とりあつかい" -> "取[と]り 扱[あつか]い".
     """
-    if word == reading or all(_is_kana(char) for char in word):
+    if word == reading or all(is_kana(char) for char in word):
         return word
 
-    runs = ["".join(chars) for _, chars in groupby(word, key=_is_kana)]
+    runs = ["".join(chars) for _, chars in groupby(word, key=is_kana)]
     # Kana runs must appear verbatim in the reading, so they anchor where each kanji
     # run's reading starts and ends. Both sides are compared in hiragana because the
     # dictionary may spell okurigana and reading in different scripts.
-    pattern = "".join(re.escape(_to_hiragana(run)) if _is_kana(run[0]) else "(.+?)" for run in runs)
+    pattern = "".join(re.escape(_to_hiragana(run)) if is_kana(run[0]) else "(.+?)" for run in runs)
     match = re.fullmatch(pattern, _to_hiragana(reading))
     if match is None:
         return f"{word}[{reading}]"
@@ -40,7 +40,7 @@ def to_anki_furigana(word: str, reading: str) -> str:
     parts = []
     group = 1
     for run in runs:
-        if _is_kana(run[0]):
+        if is_kana(run[0]):
             parts.append(run)
             continue
         start, end = match.span(group)
